@@ -90,7 +90,7 @@ function registerIpcHandlers() {
     nativeTheme.themeSource = theme;
   });
   ipcMain.handle("get-app-version", () => {
-    return require("../../package.json").version;
+    return app.getVersion();
   });
   ipcMain.handle("check-for-updates", async () => {
     try {
@@ -101,7 +101,7 @@ function registerIpcHandlers() {
         headersTimeout: 10000,
       });
       if (res.statusCode === 404) {
-        const current = require("../../package.json").version;
+        const current = app.getVersion();
         return { ok: true, current: "v" + current, latest: null, newer: false, url: null };
       }
       if (res.statusCode !== 200) {
@@ -109,7 +109,7 @@ function registerIpcHandlers() {
       }
       const body = await res.body.json();
       const latest = (body.tag_name || "").replace(/^v/, "");
-      const current = require("../../package.json").version;
+      const current = app.getVersion();
       const newer = compareVersions(latest, current) > 0;
       return { ok: true, current: "v" + current, latest: body.tag_name, newer, url: body.html_url };
     } catch (err) {
