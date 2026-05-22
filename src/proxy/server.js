@@ -34,11 +34,12 @@ function createProxyServer(settings, providers) {
 
 function stopProxyServer() {
   if (!server) return;
-  server.close(() => {
+  const closing = server;
+  server = null;
+  closing.close(() => {
     status = "stopped";
     console.log("[proxy] Stopped.");
   });
-  server = null;
 }
 
 function getStatus() {

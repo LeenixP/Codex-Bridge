@@ -84,13 +84,16 @@ function registerIpcHandlers() {
 
 function startProxy() {
   stopProxyServer();
-  createProxyServer(settings, providers);
-  // Auto-inject Codex config if there are providers
-  if (providers && providers.length > 0 && providers.some((p) => p.name && p.model)) {
-    injectCodexConfig(settings.port || 8787, providers);
-  }
-  notifyProxyStatus();
-  updateTrayMenu();
+  // Wait briefly for the previous server to close before creating a new one
+  setTimeout(() => {
+    createProxyServer(settings, providers);
+    // Auto-inject Codex config if there are providers
+    if (providers && providers.length > 0 && providers.some((p) => p.name && p.model)) {
+      injectCodexConfig(settings.port || 8787, providers);
+    }
+    notifyProxyStatus();
+    updateTrayMenu();
+  }, 100);
 }
 
 function notifyProxyStatus() {
@@ -165,8 +168,7 @@ function showMainWindow() {
 
 function createTray() {
   const icon = nativeImage.createFromPath(resolveTrayIcon());
-  const resized = icon.resize({ width: 16, height: 16 });
-  tray = new Tray(resized);
+  tray = new Tray(icon);
   tray.setToolTip(PRODUCT_NAME);
   updateTrayMenu();
 

@@ -7,6 +7,8 @@ const path = require("node:path");
 
 const CODEX_CONFIG_DIR = path.join(os.homedir(), ".codex");
 const CODEX_CONFIG_FILE = path.join(CODEX_CONFIG_DIR, "config.toml");
+const CODEX_AUTH_FILE = path.join(CODEX_CONFIG_DIR, "auth.json");
+const CODEX_PROXY_AUTH_KEY = "codex-switch-local";
 const CATALOG_TIMEOUT_MS = 8000;
 const BASE_MODELS = ["gpt-5.5", "gpt-5.4", "gpt-5.2"];
 
@@ -116,47 +118,66 @@ function writeCatalog(catalog, dataDir) {
 }
 
 function injectCodexConfig(proxyPort, providers) {
-  const result = { ok: false, message: "", configPath: CODEX_CONFIG_FILE };
+  const result = { ok: false, message: "", configPath: CODEX_CONFIG_FILE, authPath: CODEX_AUTH_FILE };
 
   if (!fs.existsSync(CODEX_CONFIG_DIR)) {
     fs.mkdirSync(CODEX_CONFIG_DIR, { recursive: true });
   }
 
-  let existing = "";
-  try {
-    existing = fs.readFileSync(CODEX_CONFIG_FILE, "utf8");
-  } catch {}
-
-  const marker = "# --- Codex-Switch managed section ---";
-  const endMarker = "# --- End Codex-Switch ---";
-
-  // Remove old managed section
-  const startIdx = existing.indexOf(marker);
-  const endIdx = existing.indexOf(endMarker);
-  if (startIdx !== -1 && endIdx !== -1) {
-    existing = existing.slice(0, startIdx) + existing.slice(endIdx + endMarker.length + 1);
-  }
-
-  // Build new section
   const activeProvider = providers.find((p) => p.active) || providers[0];
   if (!activeProvider) {
     result.message = "No provider to inject.";
     return result;
   }
 
+  const providerId = "codex-switch";
+  const modelSlug = sanitizeSlug(activeProvider.name);
+  const modelName = "codex-switch-" + modelSlug;
+
+  // Read existing config
+  let existing = "";
+  try {
+    existing = fs.readFileSync(CODEX_CONFIG_FILE, "utf8");
+  } catch {}
+
+  // Remove old managed sections
+  const marker = "# --- Codex-Switch managed section ---";
+  const endMarker = "# --- End Codex-Switch ---";
+  const startIdx = existing.indexOf(marker);
+  const endIdx = existing.indexOf(endMarker);
+  if (startIdx !== -1 && endIdx !== -1) {
+    existing = existing.slice(0, startIdx) + existing.slice(endIdx + endMarker.length + 1);
+  }
+
+  // Build managed section in correct Codex TOML format
   const section = [
     marker,
-    'model = "codex-switch-' + sanitizeSlug(activeProvider.name) + '"',
+    '# Codex-Switch proxy configuration',
+    'model_provider = "' + providerId + '"',
+    'model = "' + modelName + '"',
+    "model_context_window = 1000000",
+    "model_auto_compact_token_limit = 900000",
+    'model_reasoning_effort = "high"',
+    "disable_response_storage = true",
+    'preferred_auth_method = "apikey"',
     "",
-    "[api]",
-    'api_base_url = "http://127.0.0.1:' + proxyPort + '/v1"',
-    'api_key = "codex-switch-local"',
+    "[model_providers." + providerId + "]",
+    'name = "' + activeProvider.name + '"',
+    'wire_api = "responses"',
+    "requires_openai_auth = true",
+    'base_url = "http://127.0.0.1:' + proxyPort + '/v1"',
+    "",
+    "[model_providers." + providerId + ".model_aliases]",
+    '"' + modelName + '" = "codex-switch-' + modelSlug + '"',
     endMarker,
     "",
   ].join("\n");
 
   const newContent = existing.trimEnd() + "\n\n" + section;
   fs.writeFileSync(CODEX_CONFIG_FILE, newContent, "utf8");
+
+  // Ensure auth.json exists with a local key so Codex can authenticate
+  writeCodexAuth();
 
   result.ok = true;
   result.message = "Codex config updated: model=" + activeProvider.name + ", port=" + proxyPort;
@@ -176,6 +197,30 @@ function removeCodexConfig() {
       fs.writeFileSync(CODEX_CONFIG_FILE, content.trimEnd() + "\n", "utf8");
     }
   } catch {}
+
+  // Remove auth.json if it only contains the local proxy key
+  try {
+    const auth = JSON.parse(fs.readFileSync(CODEX_AUTH_FILE, "utf8"));
+    if (auth.OPENAI_API_KEY === CODEX_PROXY_AUTH_KEY) {
+      fs.unlinkSync(CODEX_AUTH_FILE);
+    }
+  } catch {}
+}
+
+function writeCodexAuth() {
+  try {
+    let auth = {};
+    if (fs.existsSync(CODEX_AUTH_FILE)) {
+      auth = JSON.parse(fs.readFileSync(CODEX_AUTH_FILE, "utf8"));
+    }
+    // Preserve existing API key; only set if missing
+    if (!auth.OPENAI_API_KEY) {
+      auth.OPENAI_API_KEY = CODEX_PROXY_AUTH_KEY;
+    }
+    fs.writeFileSync(CODEX_AUTH_FILE, JSON.stringify(auth, null, 2), "utf8");
+  } catch {
+    fs.writeFileSync(CODEX_AUTH_FILE, JSON.stringify({ OPENAI_API_KEY: CODEX_PROXY_AUTH_KEY }, null, 2), "utf8");
+  }
 }
 
 function sanitizeSlug(name) {
@@ -191,6 +236,9 @@ module.exports = {
   writeCatalog,
   injectCodexConfig,
   removeCodexConfig,
+  writeCodexAuth,
   findCodexCommand,
   getCodexConfigDir,
+  CODEX_AUTH_FILE,
+  CODEX_PROXY_AUTH_KEY,
 };
