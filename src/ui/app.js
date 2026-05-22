@@ -54,7 +54,6 @@
 
     // Update dynamic content: providers list, about desc
     if (providers !== undefined) renderProviders();
-    document.getElementById("app-version").textContent = "v0.1.0";
   }
 
   function updateProxyStatusLabel() {

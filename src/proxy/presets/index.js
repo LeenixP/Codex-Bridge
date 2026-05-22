@@ -39,9 +39,10 @@ const presets = {
     name: "DeepSeek",
     protocol: "openai-chat",
     baseUrl: "https://api.deepseek.com/v1",
+    models: ["deepseek-v4-pro", "deepseek-v4-flash", "deepseek-v4-pro[1m]", "deepseek-v4-flash[1m]"],
     variants: {
       "openai-chat": "https://api.deepseek.com/v1",
-      anthropic: "https://api.deepseek.com/anthropic",
+      "anthropic": "https://api.deepseek.com/anthropic",
     },
     features: {
       reasoningPassthrough: true,
@@ -121,8 +122,15 @@ function getVariantBaseUrl(provider, protocol) {
 
 /** List of presets suitable for the UI "quick add" buttons. */
 function getQuickPresets() {
-  return Object.values(presets)
-    .filter(function (p) { return p.baseUrl !== ""; });
+  return Object.values(presets).map(function (p) {
+    return {
+      id: p.id,
+      name: p.name,
+      protocol: p.protocol,
+      baseUrl: p.baseUrl,
+      models: p.models || [],
+    };
+  });
 }
 
 // ---- Internal helpers -------------------------------------------------------
