@@ -5,7 +5,7 @@ const path = require("node:path");
 const os = require("node:os");
 
 const APP_NAME = "Codex-Switch";
-const DEFAULT_PORT = 8787;
+const DEFAULT_PORT = 8629;
 const DEFAULT_HOST = "127.0.0.1";
 
 function getDataDir() {

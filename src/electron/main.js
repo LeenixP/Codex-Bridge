@@ -74,7 +74,7 @@ function registerIpcHandlers() {
     return testProviderConnection(provider);
   });
   ipcMain.handle("inject-codex-config", () => {
-    return injectCodexConfig(settings.port || 8787, providers);
+    return injectCodexConfig(settings.port || 8629, providers);
   });
   ipcMain.handle("remove-codex-config", () => {
     removeCodexConfig();
@@ -89,7 +89,7 @@ function startProxy() {
     createProxyServer(settings, providers);
     // Auto-inject Codex config if there are providers
     if (providers && providers.length > 0 && providers.some((p) => p.name && p.model)) {
-      injectCodexConfig(settings.port || 8787, providers);
+      injectCodexConfig(settings.port || 8629, providers);
     }
     notifyProxyStatus();
     updateTrayMenu();
@@ -197,7 +197,7 @@ function updateTrayMenu() {
       else startProxy();
       updateTrayMenu();
     }},
-    { label: "Port: " + (settings.port || 8787), enabled: false },
+    { label: "Port: " + (settings.port || 8629), enabled: false },
     { type: "separator" },
     ...(providerItems.length > 0 ? [{ label: "Providers", submenu: providerItems }] : []),
     { type: "separator" },

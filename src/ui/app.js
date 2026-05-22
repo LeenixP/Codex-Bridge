@@ -262,7 +262,7 @@
 
   // Settings
   function applySettings() {
-    document.getElementById("setting-port").value = settings.port || 8787;
+    document.getElementById("setting-port").value = settings.port || 8629;
     document.getElementById("setting-autostart").checked = settings.autoStart !== false;
 
     setRadio("thinking", settings.thinkingVisibility || "visible");
@@ -308,7 +308,7 @@
   }));
 
   async function saveCurrentSettings() {
-    settings.port = Number(document.getElementById("setting-port").value) || 8787;
+    settings.port = Number(document.getElementById("setting-port").value) || 8629;
     settings.autoStart = document.getElementById("setting-autostart").checked;
     settings.thinkingVisibility = getRadio("thinking");
     settings.theme = getRadio("theme");
