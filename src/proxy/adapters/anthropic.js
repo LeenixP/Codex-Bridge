@@ -123,24 +123,44 @@ function convertInputToMessages(requestBody, provider) {
           messages.push(converted);
         }
       } else if (item.type === "function_call") {
-        messages.push({
-          role: "assistant",
-          content: [{
-            type: "tool_use",
-            id: item.call_id || item.id,
-            name: item.name,
-            input: safeParseJson(item.arguments),
-          }],
-        });
+        const toolUse = {
+          type: "tool_use",
+          id: item.call_id || item.id,
+          name: item.name,
+          input: safeParseJson(item.arguments),
+        };
+        // Merge into previous message if it's an assistant (keeps tool_use together)
+        const last = messages[messages.length - 1];
+        if (last && last.role === "assistant") {
+          if (typeof last.content === "string") {
+            last.content = [{ type: "text", text: last.content }, toolUse];
+          } else if (Array.isArray(last.content)) {
+            last.content.push(toolUse);
+          } else {
+            last.content = [toolUse];
+          }
+        } else {
+          messages.push({ role: "assistant", content: [toolUse] });
+        }
       } else if (item.type === "function_call_output") {
-        messages.push({
-          role: "user",
-          content: [{
-            type: "tool_result",
-            tool_use_id: item.call_id || item.id,
-            content: typeof item.output === "string" ? item.output : JSON.stringify(item.output),
-          }],
-        });
+        const toolResult = {
+          type: "tool_result",
+          tool_use_id: item.call_id || item.id,
+          content: typeof item.output === "string" ? item.output : JSON.stringify(item.output),
+        };
+        // Merge into previous message if it's a user (keeps tool_results together)
+        const last = messages[messages.length - 1];
+        if (last && last.role === "user") {
+          if (typeof last.content === "string") {
+            last.content = [{ type: "text", text: last.content }, toolResult];
+          } else if (Array.isArray(last.content)) {
+            last.content.push(toolResult);
+          } else {
+            last.content = [toolResult];
+          }
+        } else {
+          messages.push({ role: "user", content: [toolResult] });
+        }
       }
     }
   }
