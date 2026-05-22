@@ -6,20 +6,26 @@ const { orchestrate } = require("./core/orchestrator");
 
 let server = null;
 let status = "stopped";
+let lastError = "";
 
 function createProxyServer(settings, providers) {
   const port = settings.port || 8787;
   const host = settings.host || "127.0.0.1";
 
+  status = "starting";
+  lastError = "";
+
   server = http.createServer((req, res) => handleRequest(req, res, settings, providers));
 
   server.on("error", (error) => {
     status = "error";
+    lastError = error.message;
     console.error("[proxy] Server error:", error.message);
   });
 
   server.listen(port, host, () => {
     status = "running";
+    lastError = "";
     console.log("[proxy] Listening on http://" + host + ":" + port + "/v1");
   });
 
@@ -37,6 +43,10 @@ function stopProxyServer() {
 
 function getStatus() {
   return status;
+}
+
+function getLastError() {
+  return lastError;
 }
 
 async function handleRequest(req, res, settings, providers) {
@@ -126,4 +136,5 @@ module.exports = {
   createProxyServer,
   stopProxyServer,
   getStatus,
+  getLastError,
 };

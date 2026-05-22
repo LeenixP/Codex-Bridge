@@ -2,7 +2,7 @@
   "name": "codex-switch",
   "version": "0.1.0",
   "private": true,
-  "description": "Protocol bridge for Codex desktop — converts OpenAI Chat and Anthropic APIs to OpenAI Responses format.",
+  "description": "Protocol bridge for Codex desktop -- converts OpenAI Chat and Anthropic APIs to OpenAI Responses format.",
   "author": "LeenixP",
   "license": "MIT",
   "homepage": "https://github.com/LeenixP/Codex-Switch",
@@ -36,7 +36,7 @@
     ],
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "win": {
-      "icon": "src/ui/assets/icons/app.png",
+      "icon": "src/ui/assets/icons/app.ico",
       "target": [
         {
           "target": "nsis",

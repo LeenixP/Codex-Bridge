@@ -3,7 +3,7 @@
 const { app, BrowserWindow, Menu, Tray, ipcMain, nativeImage, nativeTheme, shell } = require("electron");
 const path = require("node:path");
 const { loadSettings, saveSettings, loadProviders, saveProviders, getDataDir } = require("../shared/config");
-const { createProxyServer, stopProxyServer, getStatus } = require("../proxy/server");
+const { createProxyServer, stopProxyServer, getStatus, getLastError } = require("../proxy/server");
 const { injectCodexConfig, removeCodexConfig } = require("../codex/catalog");
 
 const PRODUCT_NAME = "Codex-Switch";
@@ -25,6 +25,10 @@ if (!singleInstanceLock) {
 async function bootstrap() {
   settings = loadSettings();
   providers = loadProviders();
+
+  // Apply dark title bar on Linux
+  nativeTheme.themeSource = settings.theme === "dark" ? "dark" : (settings.theme === "light" ? "light" : "system");
+
   registerIpcHandlers();
   createMainWindow();
   createTray();
@@ -56,6 +60,7 @@ function registerIpcHandlers() {
     return providers;
   });
   ipcMain.handle("get-proxy-status", () => getStatus());
+  ipcMain.handle("get-proxy-error", () => getLastError());
   ipcMain.handle("start-proxy", () => {
     startProxy();
     return getStatus();
@@ -80,6 +85,10 @@ function registerIpcHandlers() {
 function startProxy() {
   stopProxyServer();
   createProxyServer(settings, providers);
+  // Auto-inject Codex config if there are providers
+  if (providers && providers.length > 0 && providers.some((p) => p.name && p.model)) {
+    injectCodexConfig(settings.port || 8787, providers);
+  }
   notifyProxyStatus();
   updateTrayMenu();
 }
@@ -204,7 +213,7 @@ function quitApp() {
 function resolveIcon() {
   const iconsDir = path.join(__dirname, "..", "ui", "assets", "icons");
   if (process.platform === "win32") return path.join(iconsDir, "app.ico");
-  if (process.platform === "darwin") return path.join(iconsDir, "app.icns");
+  if (process.platform === "darwin") return path.join(iconsDir, "app-512.png");
   return path.join(iconsDir, "app.png");
 }
 

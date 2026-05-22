@@ -11,7 +11,6 @@ async function orchestrate(req, res, requestBody, provider, settings) {
 
   const adapter = resolveAdapter(provider.protocol);
   if (!adapter) {
-    const { sendJson } = require("../server");
     res.writeHead(400, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: { message: "Unsupported protocol: " + provider.protocol, type: "invalid_request_error", code: "unsupported_protocol" } }));
     return;

@@ -48,6 +48,7 @@ function loadSettings() {
     host: DEFAULT_HOST,
     autoStart: true,
     theme: "dark",
+    language: "zh",
     closeBehavior: "tray",
     thinkingVisibility: "visible",
   };

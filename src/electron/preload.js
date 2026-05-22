@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld("codexSwitch", {
   getProviders: () => ipcRenderer.invoke("get-providers"),
   saveProviders: (providers) => ipcRenderer.invoke("save-providers", providers),
   getProxyStatus: () => ipcRenderer.invoke("get-proxy-status"),
+  getProxyError: () => ipcRenderer.invoke("get-proxy-error"),
   startProxy: () => ipcRenderer.invoke("start-proxy"),
   stopProxy: () => ipcRenderer.invoke("stop-proxy"),
   testProvider: (provider) => ipcRenderer.invoke("test-provider", provider),

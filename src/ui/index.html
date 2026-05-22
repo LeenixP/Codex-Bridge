@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="zh" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -26,14 +26,14 @@
           </div>
           <div>
             <div class="logo-text">Codex-Switch</div>
-            <div class="logo-subtitle">Protocol Bridge</div>
+            <div class="logo-subtitle" data-i18n="aboutEyebrow">协议桥接</div>
           </div>
         </div>
       </div>
 
       <div class="proxy-status stopped" id="proxy-status">
         <span class="status-dot"></span>
-        <span class="status-text">Proxy Stopped</span>
+        <span class="status-text" data-i18n="proxyStopped">代理已停止</span>
       </div>
 
       <nav class="sidebar-nav">
@@ -41,30 +41,30 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M20 7h-9M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>
           </svg>
-          <span>Providers</span>
+          <span data-i18n="navProviders">供应商</span>
         </button>
         <button class="nav-item" data-page="settings">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
           </svg>
-          <span>Settings</span>
+          <span data-i18n="navSettings">设置</span>
         </button>
         <button class="nav-item" data-page="logs">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
           </svg>
-          <span>Logs</span>
+          <span data-i18n="navLogs">日志</span>
         </button>
         <button class="nav-item" data-page="about">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
           </svg>
-          <span>About</span>
+          <span data-i18n="navAbout">关于</span>
         </button>
       </nav>
 
-      <div class="sidebar-footer">
-        Open-source protocol bridge for Codex desktop.
+      <div class="sidebar-footer" data-i18n="sidebarFooter">
+        Codex 桌面应用的开源协议桥接工具。
       </div>
     </aside>
 
@@ -73,20 +73,20 @@
       <section id="page-providers" class="page active">
         <div class="page-header">
           <div>
-            <h1>Providers</h1>
-            <p class="page-subtitle">Manage API providers for protocol bridging.</p>
+            <h1 data-i18n="providersTitle">供应商管理</h1>
+            <p class="page-subtitle" data-i18n="providersSubtitle">管理 API 供应商，切换上游协议。</p>
           </div>
           <div class="header-actions">
             <button class="btn btn-primary" id="btn-add-provider">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              Add Provider
+              <span data-i18n="addProvider">添加供应商</span>
             </button>
           </div>
         </div>
         <div class="provider-list" id="provider-list">
           <div class="empty-state">
-            <p>No providers configured yet.</p>
-            <p>Click "Add Provider" to get started.</p>
+            <p data-i18n="noProviders">尚未配置供应商。</p>
+            <p data-i18n="noProvidersHint">点击「添加供应商」开始使用。</p>
           </div>
         </div>
       </section>
@@ -95,21 +95,23 @@
       <section id="page-settings" class="page">
         <div class="page-header">
           <div>
-            <h1>Settings</h1>
-            <p class="page-subtitle">Configure proxy behavior and appearance.</p>
+            <h1 data-i18n="settingsTitle">设置</h1>
+            <p class="page-subtitle" data-i18n="settingsSubtitle">配置代理行为和外观。</p>
           </div>
         </div>
 
         <div class="panel">
-          <div class="panel-header"><h2>Proxy</h2></div>
+          <div class="panel-header"><h2 data-i18n="proxySection">代理</h2></div>
           <div class="panel-body settings-panel">
             <div class="setting-item">
-              <span>Listen port<small>Restart required after changing.</small></span>
+              <span data-i18n="listenPort">监听端口</span>
+              <small data-i18n="listenPortHint" style="display:block;font-size:12px;color:var(--text-muted);margin-top:2px">修改后需重启代理。</small>
               <input type="number" id="setting-port" class="inline-control" value="8787" min="1024" max="65535" style="width: 120px;">
             </div>
             <div class="setting-divider"></div>
             <div class="setting-item">
-              <span>Auto-start proxy<small>Start proxy when application launches.</small></span>
+              <span data-i18n="autoStart">启动时自动运行代理</span>
+              <small data-i18n="autoStartHint" style="display:block;font-size:12px;color:var(--text-muted);margin-top:2px">应用程序启动时自动开启代理。</small>
               <label class="toggle-switch">
                 <input type="checkbox" id="setting-autostart" checked>
                 <span class="slider"></span>
@@ -117,39 +119,49 @@
             </div>
             <div class="setting-divider"></div>
             <div class="setting-item">
-              <label>Thinking visibility</label>
+              <label data-i18n="thinkingVisibility">思考可见性</label>
               <div class="segmented-control">
                 <input type="radio" name="thinking" id="thinking_visible" value="visible" checked>
-                <label for="thinking_visible">Visible</label>
+                <label for="thinking_visible" data-i18n="thinkingVisible">可见</label>
                 <input type="radio" name="thinking" id="thinking_hidden" value="hidden">
-                <label for="thinking_hidden">Hidden</label>
+                <label for="thinking_hidden" data-i18n="thinkingHidden">隐藏</label>
               </div>
             </div>
           </div>
         </div>
 
         <div class="panel">
-          <div class="panel-header"><h2>Appearance</h2></div>
+          <div class="panel-header"><h2 data-i18n="appearanceSection">外观</h2></div>
           <div class="panel-body settings-panel">
             <div class="setting-item">
-              <label>Theme</label>
+              <label data-i18n="theme">主题</label>
               <div class="segmented-control">
                 <input type="radio" name="theme" id="theme_dark" value="dark" checked>
-                <label for="theme_dark">Dark</label>
+                <label for="theme_dark" data-i18n="themeDark">暗色</label>
                 <input type="radio" name="theme" id="theme_light" value="light">
-                <label for="theme_light">Light</label>
+                <label for="theme_light" data-i18n="themeLight">浅色</label>
                 <input type="radio" name="theme" id="theme_system" value="system">
-                <label for="theme_system">System</label>
+                <label for="theme_system" data-i18n="themeSystem">跟随系统</label>
               </div>
             </div>
             <div class="setting-divider"></div>
             <div class="setting-item">
-              <label>Close behavior</label>
+              <label data-i18n="language">语言</label>
+              <div class="segmented-control">
+                <input type="radio" name="language" id="lang_zh" value="zh" checked>
+                <label for="lang_zh">中文</label>
+                <input type="radio" name="language" id="lang_en" value="en">
+                <label for="lang_en">English</label>
+              </div>
+            </div>
+            <div class="setting-divider"></div>
+            <div class="setting-item">
+              <label data-i18n="closeBehavior">关闭行为</label>
               <div class="segmented-control">
                 <input type="radio" name="close" id="close_tray" value="tray" checked>
-                <label for="close_tray">Minimize to tray</label>
+                <label for="close_tray" data-i18n="closeTray">最小化到托盘</label>
                 <input type="radio" name="close" id="close_exit" value="exit">
-                <label for="close_exit">Exit</label>
+                <label for="close_exit" data-i18n="closeExit">直接退出</label>
               </div>
             </div>
           </div>
@@ -157,13 +169,13 @@
 
         <div class="integration-card">
           <div class="integration-card-header">
-            <h3>Codex Integration</h3>
+            <h3 data-i18n="codexIntegration">Codex 集成</h3>
           </div>
           <div class="integration-card-body">
-            <p class="integration-hint">Inject proxy configuration into <code>~/.codex/config.toml</code> so Codex routes requests through Codex-Switch.</p>
+            <p class="integration-hint" data-i18n="codexHint">将代理配置注入 ~/.codex/config.toml，使 Codex 通过 Codex-Switch 路由请求。</p>
             <div class="btn-group">
-              <button class="btn btn-primary" id="btn-inject-codex">Inject Config</button>
-              <button class="btn btn-secondary" id="btn-remove-codex">Remove Config</button>
+              <button class="btn btn-primary" id="btn-inject-codex" data-i18n="injectConfig">注入配置</button>
+              <button class="btn btn-secondary" id="btn-remove-codex" data-i18n="removeConfig">移除配置</button>
             </div>
           </div>
         </div>
@@ -173,17 +185,17 @@
       <section id="page-logs" class="page">
         <div class="page-header">
           <div>
-            <h1>Event Trace</h1>
-            <p class="page-subtitle">Real-time proxy request and response events.</p>
+            <h1 data-i18n="logsTitle">事件追踪</h1>
+            <p class="page-subtitle" data-i18n="logsSubtitle">实时代理请求和响应事件。</p>
           </div>
           <div class="header-actions">
-            <button class="btn btn-secondary" id="btn-clear-logs">Clear</button>
+            <button class="btn btn-secondary" id="btn-clear-logs" data-i18n="clearLogs">清空</button>
           </div>
         </div>
         <div class="panel">
           <div class="panel-body">
             <div class="log-list" id="log-list">
-              <div class="empty-state"><p>No log entries yet.</p></div>
+              <div class="empty-state"><p data-i18n="noLogs">暂无日志。</p></div>
             </div>
           </div>
         </div>
@@ -193,7 +205,7 @@
       <section id="page-about" class="page">
         <div class="page-header">
           <div>
-            <h1>About</h1>
+            <h1 data-i18n="aboutTitle">关于</h1>
           </div>
         </div>
         <div class="panel">
@@ -211,18 +223,18 @@
               </svg>
             </div>
             <div>
-              <span class="eyebrow">Protocol Bridge</span>
+              <span class="eyebrow" data-i18n="aboutEyebrow">协议桥接</span>
               <h2>Codex-Switch</h2>
-              <p>Local protocol bridge for Codex desktop — converts OpenAI Chat and Anthropic APIs to Responses format.</p>
+              <p data-i18n="aboutDesc">Codex 桌面应用的本地协议桥接，将 OpenAI Chat 和 Anthropic API 转换为 Responses 格式。</p>
               <div class="version-pill" id="app-version">v0.1.0</div>
               <div class="about-links">
                 <button class="btn btn-secondary" id="link-github">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
-                  Source
+                  <span data-i18n="source">源码</span>
                 </button>
                 <button class="btn btn-secondary" id="link-issues">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                  Feedback
+                  <span data-i18n="feedback">反馈</span>
                 </button>
               </div>
             </div>
