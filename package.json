@@ -1,6 +1,6 @@
 {
   "name": "codex-switch",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Protocol bridge for Codex desktop -- converts OpenAI Chat and Anthropic APIs to OpenAI Responses format.",
   "author": "LeenixP",
@@ -50,9 +50,14 @@
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
+      "createStartMenuShortcut": true,
+      "allowElevation": true,
+      "runAfterFinish": false,
+      "uninstallDisplayName": "Codex-Switch",
+      "installerSidebar": false
     },
     "mac": {
       "icon": "src/ui/assets/icons/app-512.png",

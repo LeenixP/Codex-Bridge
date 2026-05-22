@@ -133,14 +133,13 @@
       el.title = "";
     }
     updateProxyStatusLabel();
+    updateProxyButton();
   }
 
   // Settings
   function applySettings() {
     document.getElementById("setting-port").value = settings.port || 8629;
-    document.getElementById("setting-autostart").checked = settings.autoStart !== false;
 
-    setRadio("thinking", settings.thinkingVisibility || "visible");
     setRadio("theme", settings.theme || "dark");
     setRadio("language", settings.language || "zh");
     setRadio("close", settings.closeBehavior || "tray");
@@ -167,12 +166,11 @@
     } else {
       document.documentElement.setAttribute("data-theme", "dark");
     }
+    if (api && api.setThemeSource) api.setThemeSource(theme);
   }
 
   // Settings change listeners
   document.getElementById("setting-port").addEventListener("change", saveCurrentSettings);
-  document.getElementById("setting-autostart").addEventListener("change", saveCurrentSettings);
-  document.querySelectorAll('input[name="thinking"]').forEach((r) => r.addEventListener("change", saveCurrentSettings));
   document.querySelectorAll('input[name="close"]').forEach((r) => r.addEventListener("change", saveCurrentSettings));
   document.querySelectorAll('input[name="theme"]').forEach((r) => r.addEventListener("change", () => {
     applyTheme(getRadio("theme"));
@@ -188,8 +186,6 @@
   async function saveCurrentSettings() {
     try {
       settings.port = Number(document.getElementById("setting-port").value) || 8629;
-      settings.autoStart = document.getElementById("setting-autostart").checked;
-      settings.thinkingVisibility = getRadio("thinking");
       settings.theme = getRadio("theme");
       settings.language = getRadio("language");
       settings.closeBehavior = getRadio("close");
@@ -200,23 +196,70 @@
     }
   }
 
-  // Codex integration
-  document.getElementById("btn-inject-codex").addEventListener("click", async () => {
-    if (!api) return;
-    try {
-      const result = await api.injectCodexConfig();
-      showToast(result.message, result.ok ? "success" : "error");
-    } catch (err) {
-      showToast("Inject failed: " + err.message, "error");
+  // Sidebar proxy toggle button
+  let needsRestart = false;
+
+  function markNeedsRestart() {
+    needsRestart = true;
+    updateProxyButton();
+  }
+
+  function clearNeedsRestart() {
+    needsRestart = false;
+    updateProxyButton();
+  }
+
+  function updateProxyButton() {
+    const btn = document.getElementById("btn-toggle-proxy");
+    if (!btn) return;
+    const label = btn.querySelector(".btn-label");
+    const statusEl = document.getElementById("proxy-status");
+    const isRunning = statusEl && statusEl.classList.contains("running");
+    const isLoading = statusEl && statusEl.classList.contains("starting");
+
+    btn.className = "sidebar-proxy-btn";
+    if (isLoading) {
+      btn.classList.add("loading");
+      if (label) label.textContent = "...";
+    } else if (isRunning) {
+      btn.classList.add("running");
+      if (label) label.textContent = t("stopProxy");
+    } else if (needsRestart) {
+      btn.classList.add("stopped", "flash");
+      if (label) label.textContent = t("startProxy");
+    } else {
+      btn.classList.add("stopped");
+      if (label) label.textContent = t("startProxy");
     }
-  });
-  document.getElementById("btn-remove-codex").addEventListener("click", async () => {
+  }
+
+  document.getElementById("btn-toggle-proxy").addEventListener("click", async () => {
     if (!api) return;
+    const btn = document.getElementById("btn-toggle-proxy");
+    const statusEl = document.getElementById("proxy-status");
+    if (!btn || !statusEl) return;
+
+    const isRunning = statusEl.classList.contains("running");
+    if (btn.classList.contains("loading")) return;
+
+    // Loading state
+    btn.classList.add("loading");
+    btn.classList.remove("flash");
+    const label = btn.querySelector(".btn-label");
+    if (label) label.textContent = "...";
+
     try {
-      const result = await api.removeCodexConfig();
-      showToast(result.message, result.ok ? "success" : "error");
+      if (isRunning) {
+        // Stop proxy + remove config
+        await api.stopProxy();
+        clearNeedsRestart();
+      } else {
+        // Start proxy (injects config automatically)
+        await api.startProxy();
+        clearNeedsRestart();
+      }
     } catch (err) {
-      showToast("Remove failed: " + err.message, "error");
+      showToast("Error: " + err.message, "error");
     }
   });
 
@@ -241,6 +284,10 @@
       '<div class="provider-name">' + escapeHtml(provider.name) + ' ' + statusLabel + '</div>' +
       '<div class="provider-detail"><span class="protocol-badge">' + protocolLabel + '</span> ' + escapeHtml(provider.model || "") + '</div>' +
       '<div class="provider-url">' + escapeHtml(provider.baseUrl || "") + '</div>' +
+      '<div class="feature-toggles">' +
+      '<label class="feature-toggle" title="' + t("labelVision") + '"><label class="toggle-switch"><input type="checkbox" class="toggle-vision" data-index="' + index + '"' + (provider.vision !== false ? " checked" : "") + '><span class="slider"></span></label><span>' + t("labelVision") + '</span></label>' +
+      '<label class="feature-toggle" title="' + t("labelImageGen") + '"><label class="toggle-switch"><input type="checkbox" class="toggle-imagegen" data-index="' + index + '"' + (provider.imageGen !== false ? " checked" : "") + '><span class="slider"></span></label><span>' + t("labelImageGen") + '</span></label>' +
+      '</div>' +
       '</div>' +
       '<div class="provider-actions">' +
       (provider.active ? "" : '<button class="btn-icon btn-activate" title="' + t("activate") + '" aria-label="' + t("activate") + '"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></button>') +
@@ -270,6 +317,30 @@
     document.querySelectorAll(".btn-test").forEach((btn) => {
       btn.addEventListener("click", (e) => { testProvider(getCardIndex(e.target)); });
     });
+    document.querySelectorAll(".toggle-vision").forEach((cb) => {
+      cb.addEventListener("change", async (e) => {
+        const idx = getCardIndex(e.target);
+        providers[idx].vision = e.target.checked;
+        const isActive = providers[idx].active;
+        if (api) {
+          if (isActive) await api.stopProxy().catch(() => {});
+          await api.saveProviders(providers);
+        }
+        if (isActive) markNeedsRestart();
+      });
+    });
+    document.querySelectorAll(".toggle-imagegen").forEach((cb) => {
+      cb.addEventListener("change", async (e) => {
+        const idx = getCardIndex(e.target);
+        providers[idx].imageGen = e.target.checked;
+        const isActive = providers[idx].active;
+        if (api) {
+          if (isActive) await api.stopProxy().catch(() => {});
+          await api.saveProviders(providers);
+        }
+        if (isActive) markNeedsRestart();
+      });
+    });
   }
 
   function getCardIndex(el) {
@@ -278,16 +349,25 @@
 
   async function activateProvider(index) {
     providers.forEach((p, i) => { p.active = i === index; });
-    if (api) await api.saveProviders(providers);
+    if (api) {
+      await api.stopProxy().catch(() => {});
+      await api.saveProviders(providers);
+    }
+    markNeedsRestart();
     renderProviders();
   }
 
   async function deleteProvider(index) {
     const name = providers[index].name;
     if (!confirm(t("confirmDelete", { name }))) return;
+    const wasActive = providers[index].active;
     providers.splice(index, 1);
     if (providers.length > 0 && !providers.some((p) => p.active)) providers[0].active = true;
-    if (api) await api.saveProviders(providers);
+    if (api) {
+      if (wasActive) await api.stopProxy().catch(() => {});
+      await api.saveProviders(providers);
+    }
+    if (wasActive) markNeedsRestart();
     renderProviders();
   }
 
@@ -304,13 +384,17 @@
   // Add/Edit Provider Dialog
   document.getElementById("btn-add-provider").addEventListener("click", () => {
     editingIndex = -1;
-    showDialog({ title: t("dialogAddTitle"), name: "", protocol: "openai-chat", baseUrl: "", apiKey: "", model: "" });
+    showDialog({ title: t("dialogAddTitle"), name: "", protocol: "openai-chat", baseUrl: "", apiKey: "", model: "", vision: true, imageGen: true });
   });
 
   function openEditDialog(index) {
     editingIndex = index;
     const p = providers[index];
-    showDialog({ title: t("dialogEditTitle"), name: p.name, protocol: p.protocol, baseUrl: p.baseUrl, apiKey: p.apiKey, model: p.model });
+    showDialog({
+      title: t("dialogEditTitle"),
+      name: p.name, protocol: p.protocol, baseUrl: p.baseUrl, apiKey: p.apiKey, model: p.model,
+      vision: p.vision !== false, imageGen: p.imageGen !== false,
+    });
   }
 
   function showDialog(data) {
@@ -335,6 +419,10 @@
       '<div class="form-group"><label for="dlg-baseurl">' + t("labelBaseUrl") + '</label><input type="text" id="dlg-baseurl" value="' + escapeAttr(data.baseUrl) + '" placeholder="' + t("placeholderBaseUrl") + '"></div>' +
       '<div class="form-group"><label for="dlg-apikey">' + t("labelApiKey") + '</label><input type="password" id="dlg-apikey" value="' + escapeAttr(data.apiKey) + '" placeholder="' + t("placeholderApiKey") + '"></div>' +
       '<div class="form-group"><label for="dlg-model">' + t("labelModel") + '</label><input type="text" id="dlg-model" value="' + escapeAttr(data.model) + '" placeholder="' + t("placeholderModel") + '"></div>' +
+      '<div class="dialog-features">' +
+      '<div class="dialog-feature"><label for="dlg-vision">' + t("labelVision") + '</label><label class="toggle-switch"><input type="checkbox" id="dlg-vision"' + (data.vision !== false ? " checked" : "") + '><span class="slider"></span></label></div>' +
+      '<div class="dialog-feature"><label for="dlg-imagegen">' + t("labelImageGen") + '</label><label class="toggle-switch"><input type="checkbox" id="dlg-imagegen"' + (data.imageGen !== false ? " checked" : "") + '><span class="slider"></span></label></div>' +
+      '</div>' +
       '</div>' +
       '<div class="dialog-footer">' +
       '<button class="btn btn-secondary" id="dlg-cancel">' + t("cancel") + '</button>' +
@@ -359,7 +447,7 @@
         document.getElementById("dlg-apikey").value = "";
       });
     });
-    dialog.addEventListener("click", (e) => { if (e.target === dialog) closeDialog(); });
+    dialog.addEventListener("mousedown", (e) => { if (e.target === dialog) closeDialog(); });
 
     document.addEventListener("keydown", handleDialogKeydown);
 
@@ -393,22 +481,30 @@
     const baseUrl = document.getElementById("dlg-baseurl").value.trim();
     const apiKey = document.getElementById("dlg-apikey").value.trim();
     const model = document.getElementById("dlg-model").value.trim();
+    const vision = document.getElementById("dlg-vision").checked;
+    const imageGen = document.getElementById("dlg-imagegen").checked;
 
     if (!name) { showToast(t("toastNameRequired"), "error"); return; }
     if (!baseUrl) { showToast(t("toastUrlRequired"), "error"); return; }
     if (!apiKey) { showToast(t("toastKeyRequired"), "error"); return; }
     if (!model) { showToast(t("toastModelRequired"), "error"); return; }
 
-    const entry = { name, protocol, baseUrl, apiKey, model, active: false };
+    const entry = { name, protocol, baseUrl, apiKey, model, vision, imageGen, active: false };
+    let wasActive = false;
     if (editingIndex >= 0) {
-      entry.active = providers[editingIndex].active;
+      wasActive = providers[editingIndex].active;
+      entry.active = wasActive;
       providers[editingIndex] = entry;
     } else {
       if (providers.length === 0) entry.active = true;
       providers.push(entry);
     }
 
-    if (api) await api.saveProviders(providers);
+    if (api) {
+      if (wasActive) await api.stopProxy().catch(() => {});
+      await api.saveProviders(providers);
+    }
+    if (wasActive) markNeedsRestart();
     renderProviders();
     closeDialog();
   }
@@ -458,12 +554,60 @@
     return (text || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
+  // Update version display
+  if (api && api.getAppVersion) {
+    api.getAppVersion().then((v) => {
+      document.getElementById("app-version").textContent = "v" + v;
+    });
+  }
+
   // GitHub / Feedback links
+  function openLink(url) {
+    if (api) {
+      api.openExternal(url);
+    } else if (window.open) {
+      window.open(url, "_blank", "noopener");
+    }
+  }
   document.getElementById("link-github").addEventListener("click", () => {
-    if (api) api.openExternal("https://github.com/LeenixP/Codex-Switch");
+    openLink("https://github.com/LeenixP/Codex-Switch");
   });
   document.getElementById("link-issues").addEventListener("click", () => {
-    if (api) api.openExternal("https://github.com/LeenixP/Codex-Switch/issues");
+    openLink("https://github.com/LeenixP/Codex-Switch/issues");
+  });
+
+  // Check for updates
+  document.getElementById("btn-check-update").addEventListener("click", async () => {
+    const statusEl = document.getElementById("update-status");
+    if (!api || !api.checkForUpdates) {
+      statusEl.textContent = t("updateError");
+      statusEl.className = "update-status error";
+      return;
+    }
+    statusEl.textContent = t("updateChecking");
+    statusEl.className = "update-status";
+    try {
+      const result = await api.checkForUpdates();
+      if (result.ok && result.latest === null) {
+        statusEl.textContent = t("updateNoRelease");
+        statusEl.className = "update-status latest";
+      } else if (result.ok && result.newer) {
+        statusEl.textContent = t("updateAvailable", { version: result.latest });
+        statusEl.className = "update-status available";
+        statusEl.style.cursor = "pointer";
+        statusEl.title = result.url || "";
+        statusEl.onclick = () => openLink(result.url);
+      } else if (result.ok) {
+        statusEl.textContent = t("updateLatest");
+        statusEl.className = "update-status latest";
+      } else {
+        statusEl.textContent = result.message || t("updateError");
+        statusEl.className = "update-status error";
+      }
+    } catch {
+      statusEl.textContent = t("updateError");
+      statusEl.className = "update-status error";
+    }
   });
 
   // Boot

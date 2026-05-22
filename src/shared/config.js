@@ -84,11 +84,9 @@ function loadSettings() {
   const defaults = {
     port: DEFAULT_PORT,
     host: DEFAULT_HOST,
-    autoStart: true,
     theme: "dark",
     language: "zh",
     closeBehavior: "tray",
-    thinkingVisibility: "visible",
   };
   const saved = readJsonFile(settingsPath, {});
   return Object.assign({}, defaults, saved);

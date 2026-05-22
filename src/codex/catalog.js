@@ -134,6 +134,9 @@ function injectCodexConfig(proxyPort, providers) {
   const modelSlug = sanitizeSlug(activeProvider.name);
   const modelName = "codex-switch-" + modelSlug;
 
+  const marker = "# --- Codex-Switch managed section ---";
+  const endMarker = "# --- End Codex-Switch ---";
+
   // Read existing config
   let existing = "";
   try {
@@ -141,25 +144,28 @@ function injectCodexConfig(proxyPort, providers) {
   } catch {}
 
   // Remove old managed sections
-  const marker = "# --- Codex-Switch managed section ---";
-  const endMarker = "# --- End Codex-Switch ---";
   const startIdx = existing.indexOf(marker);
   const endIdx = existing.indexOf(endMarker);
   if (startIdx !== -1 && endIdx !== -1) {
     existing = existing.slice(0, startIdx) + existing.slice(endIdx + endMarker.length + 1);
   }
 
-  // Build managed section in correct Codex TOML format
+  // Extract original model_provider / model before replacing them
+  const origProvider = (existing.match(/^model_provider\s*=\s*"([^"]*)"/m) || [])[1] || "";
+  const origModel = (existing.match(/^model\s*=\s*"([^"]*)"/m) || [])[1] || "";
+
+  // Replace existing top-level model_provider / model lines in-place so
+  // Codex's TOML parser never sees duplicate keys (first-wins semantics).
+  existing = existing
+    .replace(/^model_provider\s*=\s*.*$/m, 'model_provider = "' + providerId + '"')
+    .replace(/^model\s*=\s*.*$/m, 'model = "' + modelName + '"');
+
+  // Build managed section — only provider definition + aliases (no top-level dupes)
   const section = [
     marker,
-    '# Codex-Switch proxy configuration',
-    'model_provider = "' + providerId + '"',
-    'model = "' + modelName + '"',
-    "model_context_window = 1000000",
-    "model_auto_compact_token_limit = 900000",
-    'model_reasoning_effort = "high"',
-    "disable_response_storage = true",
-    'preferred_auth_method = "apikey"',
+    "# Codex-Switch proxy configuration",
+    "# original_provider = \"" + origProvider + "\"",
+    "# original_model = \"" + origModel + "\"",
     "",
     "[model_providers." + providerId + "]",
     'name = "' + activeProvider.name + '"',
@@ -173,10 +179,8 @@ function injectCodexConfig(proxyPort, providers) {
     "",
   ].join("\n");
 
-  const newContent = existing.trimEnd() + "\n\n" + section;
-  fs.writeFileSync(CODEX_CONFIG_FILE, newContent, "utf8");
+  fs.writeFileSync(CODEX_CONFIG_FILE, existing.trimEnd() + "\n\n" + section, "utf8");
 
-  // Ensure auth.json exists with a local key so Codex can authenticate
   writeCodexAuth();
 
   result.ok = true;
@@ -193,7 +197,20 @@ function removeCodexConfig() {
     const startIdx = content.indexOf(marker);
     const endIdx = content.indexOf(endMarker);
     if (startIdx !== -1 && endIdx !== -1) {
+      // Restore original model_provider / model from saved comments
+      const section = content.slice(startIdx, endIdx + endMarker.length);
+      const origProvider = (section.match(/^# original_provider = "([^"]*)"/m) || [])[1];
+      const origModel = (section.match(/^# original_model = "([^"]*)"/m) || [])[1];
+
       content = content.slice(0, startIdx) + content.slice(endIdx + endMarker.length + 1);
+
+      if (origProvider) {
+        content = content.replace(/^model_provider\s*=\s*.*$/m, 'model_provider = "' + origProvider + '"');
+      }
+      if (origModel) {
+        content = content.replace(/^model\s*=\s*.*$/m, 'model = "' + origModel + '"');
+      }
+
       fs.writeFileSync(CODEX_CONFIG_FILE, content.trimEnd() + "\n", "utf8");
     }
   } catch {}

@@ -18,19 +18,20 @@ function createProxyServer(settings, providers) {
 
   server = http.createServer((req, res) => handleRequest(req, res, settings, providers));
 
-  server.on("error", (error) => {
-    status = "error";
-    lastError = error.message;
-    log.error("Server error: " + error.message);
+  return new Promise((resolve, reject) => {
+    server.on("error", (error) => {
+      status = "error";
+      lastError = error.message;
+      log.error("Server error: " + error.message);
+      reject(error);
+    });
+    server.listen(port, host, () => {
+      status = "running";
+      lastError = "";
+      log.info("Listening on http://" + host + ":" + port + "/v1");
+      resolve(server);
+    });
   });
-
-  server.listen(port, host, () => {
-    status = "running";
-    lastError = "";
-    log.info("Listening on http://" + host + ":" + port + "/v1");
-  });
-
-  return server;
 }
 
 function stopProxyServer() {

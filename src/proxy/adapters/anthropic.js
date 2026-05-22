@@ -44,7 +44,7 @@ const EFFORT_TO_BUDGET = {
  * @returns {object} Anthropic Messages request payload
  */
 function buildUpstreamRequest(requestBody, provider, _settings) {
-  const { messages, systemParts } = convertInputToMessages(requestBody);
+  const { messages, systemParts } = convertInputToMessages(requestBody, provider);
   const payload = {
     model: provider.model || requestBody.model,
     messages,
@@ -86,7 +86,7 @@ function buildUpstreamRequest(requestBody, provider, _settings) {
   return payload;
 }
 
-function convertInputToMessages(requestBody) {
+function convertInputToMessages(requestBody, provider) {
   const messages = [];
   const systemParts = [];
   const input = requestBody.input;
@@ -106,7 +106,7 @@ function convertInputToMessages(requestBody) {
       if (!item || typeof item !== "object") continue;
 
       if (item.role) {
-        const converted = convertMessageItem(item);
+        const converted = convertMessageItem(item, provider);
         if (converted.role === "system") {
           systemParts.push(typeof converted.content === "string" ? converted.content : "");
         } else {
@@ -116,7 +116,7 @@ function convertInputToMessages(requestBody) {
       }
 
       if (item.type === "message") {
-        const converted = convertMessageItem(item);
+        const converted = convertMessageItem(item, provider);
         if (converted.role === "system") {
           systemParts.push(typeof converted.content === "string" ? converted.content : "");
         } else {
@@ -148,7 +148,7 @@ function convertInputToMessages(requestBody) {
   return { messages, systemParts };
 }
 
-function convertMessageItem(item) {
+function convertMessageItem(item, provider) {
   const role = item.role === "assistant" ? "assistant" : (item.role === "system" ? "system" : "user");
   if (typeof item.content === "string") {
     return { role, content: item.content };
@@ -160,6 +160,7 @@ function convertMessageItem(item) {
       if (p.type === "input_text" || p.type === "output_text" || p.type === "text") {
         parts.push({ type: "text", text: p.text || "" });
       } else if (p.type === "input_image") {
+        if (provider && provider.vision === false) continue;
         const imageUrl = typeof p.image_url === "string" ? p.image_url : (p.image_url && p.image_url.url) || "";
         if (imageUrl && imageUrl.startsWith("data:")) {
           const match = imageUrl.match(/^data:([^;]+);base64,(.+)$/);

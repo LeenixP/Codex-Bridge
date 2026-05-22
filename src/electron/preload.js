@@ -15,6 +15,9 @@ contextBridge.exposeInMainWorld("codexSwitch", {
   injectCodexConfig: () => ipcRenderer.invoke("inject-codex-config"),
   removeCodexConfig: () => ipcRenderer.invoke("remove-codex-config"),
   openExternal: (url) => ipcRenderer.invoke("open-external", url),
+  setThemeSource: (theme) => ipcRenderer.invoke("set-theme-source", theme),
+  getAppVersion: () => ipcRenderer.invoke("get-app-version"),
+  checkForUpdates: () => ipcRenderer.invoke("check-for-updates"),
   onProxyStatusChange: (callback) => {
     ipcRenderer.on("proxy-status-changed", (_, status) => callback(status));
   },

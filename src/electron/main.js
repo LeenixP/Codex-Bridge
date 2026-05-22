@@ -40,10 +40,6 @@ async function bootstrap() {
   createMainWindow();
   createTray();
 
-  if (settings.autoStart) {
-    startProxy();
-  }
-
   app.on("activate", () => {
     if (!mainWindow) createMainWindow();
     else showMainWindow();
@@ -53,27 +49,25 @@ async function bootstrap() {
 function registerIpcHandlers() {
   ipcMain.handle("get-settings", () => settings);
   ipcMain.handle("save-settings", (_, newSettings) => {
-    const portChanged = newSettings.port !== settings.port;
     settings = Object.assign({}, settings, newSettings);
     saveSettings(settings);
-    if (portChanged && getStatus() === "running") startProxy();
     return settings;
   });
   ipcMain.handle("get-providers", () => providers);
   ipcMain.handle("save-providers", (_, newProviders) => {
     providers = newProviders;
     saveProviders(providers);
-    if (getStatus() === "running") startProxy();
     return providers;
   });
   ipcMain.handle("get-proxy-status", () => getStatus());
   ipcMain.handle("get-proxy-error", () => getLastError());
-  ipcMain.handle("start-proxy", () => {
-    startProxy();
+  ipcMain.handle("start-proxy", async () => {
+    await startProxy();
     return getStatus();
   });
-  ipcMain.handle("stop-proxy", () => {
-    stopProxyServer();
+  ipcMain.handle("stop-proxy", async () => {
+    await stopProxyServer();
+    removeCodexConfig();
     notifyProxyStatus();
     return getStatus();
   });
@@ -92,6 +86,48 @@ function registerIpcHandlers() {
       shell.openExternal(url);
     }
   });
+  ipcMain.handle("set-theme-source", (_, theme) => {
+    nativeTheme.themeSource = theme;
+  });
+  ipcMain.handle("get-app-version", () => {
+    return require("../../package.json").version;
+  });
+  ipcMain.handle("check-for-updates", async () => {
+    try {
+      const { request } = require("undici");
+      const res = await request("https://api.github.com/repos/LeenixP/Codex-Switch/releases/latest", {
+        method: "GET",
+        headers: { "Accept": "application/vnd.github+json", "User-Agent": "Codex-Switch" },
+        headersTimeout: 10000,
+      });
+      if (res.statusCode === 404) {
+        const current = require("../../package.json").version;
+        return { ok: true, current: "v" + current, latest: null, newer: false, url: null };
+      }
+      if (res.statusCode !== 200) {
+        return { ok: false, message: "GitHub API returned " + res.statusCode };
+      }
+      const body = await res.body.json();
+      const latest = (body.tag_name || "").replace(/^v/, "");
+      const current = require("../../package.json").version;
+      const newer = compareVersions(latest, current) > 0;
+      return { ok: true, current: "v" + current, latest: body.tag_name, newer, url: body.html_url };
+    } catch (err) {
+      return { ok: false, message: err.message || "Network error" };
+    }
+  });
+}
+
+function compareVersions(a, b) {
+  const pa = a.split(".").map(Number);
+  const pb = b.split(".").map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const da = pa[i] || 0;
+    const db = pb[i] || 0;
+    if (da > db) return 1;
+    if (da < db) return -1;
+  }
+  return 0;
 }
 
 async function startProxy() {
@@ -100,7 +136,7 @@ async function startProxy() {
   } catch (err) {
     console.error("[startProxy] Error stopping previous server:", err.message);
   }
-  createProxyServer(settings, providers);
+  await createProxyServer(settings, providers);
   if (providers && providers.length > 0 && providers.some((p) => p.name && p.model)) {
     injectCodexConfig(settings.port || 8629, providers);
   }
@@ -116,15 +152,48 @@ function notifyProxyStatus() {
 
 async function testProviderConnection(provider) {
   const { request } = require("undici");
-  const url = (provider.baseUrl || "").replace(/\/+$/, "") + "/models";
-  const headers = { "Authorization": "Bearer " + (provider.apiKey || "") };
-  if (provider.protocol === "anthropic") {
-    headers["x-api-key"] = provider.apiKey || "";
-    headers["anthropic-version"] = "2023-06-01";
-  }
+  const baseUrl = (provider.baseUrl || "").replace(/\/+$/, "");
+  const protocol = provider.protocol || "openai-chat";
+
   try {
-    const res = await request(url, { method: "GET", headers, headersTimeout: 10000 });
+    if (protocol === "anthropic") {
+      // Anthropic has no GET /models — validate by posting a minimal message
+      const res = await request(baseUrl + "/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": provider.apiKey || "",
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: provider.model,
+          max_tokens: 1,
+          messages: [{ role: "user", content: "hi" }],
+        }),
+        headersTimeout: 10000,
+        bodyTimeout: 10000,
+      });
+      // Any 2xx or non-auth error means the endpoint is reachable
+      if (res.statusCode === 401 || res.statusCode === 403) {
+        return { ok: false, status: res.statusCode, message: "Invalid API key" };
+      }
+      await res.body.text(); // drain
+      return { ok: true, status: res.statusCode };
+    }
+
+    // OpenAI-compatible: GET /models
+    const res = await request(baseUrl + "/models", {
+      method: "GET",
+      headers: {
+        "Authorization": "Bearer " + (provider.apiKey || ""),
+      },
+      headersTimeout: 10000,
+    });
     const status = res.statusCode;
+    await res.body.text(); // drain
+    if (status === 401 || status === 403) {
+      return { ok: false, status, message: "Invalid API key" };
+    }
     if (status >= 200 && status < 300) return { ok: true, status };
     return { ok: false, status, message: "HTTP " + status };
   } catch (err) {
@@ -210,7 +279,10 @@ function updateTrayMenu() {
     click: () => {
       providers.forEach((pr, idx) => { pr.active = idx === i; });
       saveProviders(providers);
-      if (proxyRunning) startProxy();
+      if (proxyRunning) {
+        stopProxyServer().then(() => { removeCodexConfig(); notifyProxyStatus(); updateTrayMenu(); });
+        return;
+      }
       updateTrayMenu();
     },
   }));
@@ -218,9 +290,14 @@ function updateTrayMenu() {
   const template = [
     { label: trayLabel("showWindow"), click: () => showMainWindow() },
     { type: "separator" },
-    { label: proxyRunning ? trayLabel("stopProxy") : trayLabel("startProxy"), click: () => {
-      if (proxyRunning) { stopProxyServer(); notifyProxyStatus(); }
-      else startProxy();
+    { label: proxyRunning ? trayLabel("stopProxy") : trayLabel("startProxy"), click: async () => {
+      if (proxyRunning) {
+        await stopProxyServer();
+        removeCodexConfig();
+        notifyProxyStatus();
+      } else {
+        await startProxy();
+      }
       updateTrayMenu();
     }},
     { label: trayLabel("port") + ": " + (settings.port || 8629), enabled: false },

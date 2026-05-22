@@ -28,6 +28,10 @@
         <span class="status-text" data-i18n="proxyStopped">代理已停止</span>
       </div>
 
+      <button class="sidebar-proxy-btn stopped" id="btn-toggle-proxy">
+        <span class="btn-label" data-i18n="startProxy">启动代理</span>
+      </button>
+
       <nav class="sidebar-nav">
         <button class="nav-item active" data-page="providers" aria-current="page">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -100,25 +104,6 @@
               <small data-i18n="listenPortHint" style="display:block;font-size:12px;color:var(--text-muted);margin-top:2px">修改后需重启代理。</small>
               <input type="number" id="setting-port" class="inline-control" value="8629" min="1024" max="65535" step="1" style="width: 120px;">
             </div>
-            <div class="setting-divider"></div>
-            <div class="setting-item">
-              <span data-i18n="autoStart">启动时自动运行代理</span>
-              <small data-i18n="autoStartHint" style="display:block;font-size:12px;color:var(--text-muted);margin-top:2px">应用程序启动时自动开启代理。</small>
-              <label class="toggle-switch">
-                <input type="checkbox" id="setting-autostart" checked>
-                <span class="slider"></span>
-              </label>
-            </div>
-            <div class="setting-divider"></div>
-            <div class="setting-item">
-              <label data-i18n="thinkingVisibility">思考可见性</label>
-              <div class="segmented-control">
-                <input type="radio" name="thinking" id="thinking_visible" value="visible" checked>
-                <label for="thinking_visible" data-i18n="thinkingVisible">可见</label>
-                <input type="radio" name="thinking" id="thinking_hidden" value="hidden">
-                <label for="thinking_hidden" data-i18n="thinkingHidden">隐藏</label>
-              </div>
-            </div>
           </div>
         </div>
 
@@ -155,19 +140,6 @@
                 <input type="radio" name="close" id="close_exit" value="exit">
                 <label for="close_exit" data-i18n="closeExit">直接退出</label>
               </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="integration-card">
-          <div class="integration-card-header">
-            <h3 data-i18n="codexIntegration">Codex 集成</h3>
-          </div>
-          <div class="integration-card-body">
-            <p class="integration-hint" data-i18n="codexHint">将代理配置注入 ~/.codex/config.toml，使 Codex 通过 Codex-Switch 路由请求。</p>
-            <div class="btn-group">
-              <button class="btn btn-primary" id="btn-inject-codex" data-i18n="injectConfig">注入配置</button>
-              <button class="btn btn-secondary" id="btn-remove-codex" data-i18n="removeConfig">移除配置</button>
             </div>
           </div>
         </div>
@@ -209,7 +181,10 @@
               <span class="eyebrow" data-i18n="aboutEyebrow">协议桥接</span>
               <h2>Codex-Switch</h2>
               <p data-i18n="aboutDesc">Codex 桌面应用的本地协议桥接，将 OpenAI Chat 和 Anthropic API 转换为 Responses 格式。</p>
-              <div class="version-pill" id="app-version">v0.1.0</div>
+              <div class="version-row">
+                <span class="version-pill" id="app-version">v0.1.0</span>
+                <span class="update-status" id="update-status"></span>
+              </div>
               <div class="about-links">
                 <button class="btn btn-secondary" id="link-github">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
@@ -218,6 +193,10 @@
                 <button class="btn btn-secondary" id="link-issues">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                   <span data-i18n="feedback">反馈</span>
+                </button>
+                <button class="btn btn-secondary" id="btn-check-update">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                  <span data-i18n="checkUpdates">检查更新</span>
                 </button>
               </div>
             </div>

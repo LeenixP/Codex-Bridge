@@ -39,7 +39,7 @@ const {
  * @returns {object} OpenAI Chat Completions request payload
  */
 function buildUpstreamRequest(requestBody, provider, _settings) {
-  const messages = convertInputToMessages(requestBody);
+  const messages = convertInputToMessages(requestBody, provider);
   const payload = {
     model: provider.model || requestBody.model,
     messages,
@@ -68,7 +68,7 @@ function buildUpstreamRequest(requestBody, provider, _settings) {
   return payload;
 }
 
-function convertInputToMessages(requestBody) {
+function convertInputToMessages(requestBody, provider) {
   const messages = [];
 
   if (requestBody.instructions) {
@@ -92,12 +92,12 @@ function convertInputToMessages(requestBody) {
       if (!item || typeof item !== "object") continue;
 
       if (item.role) {
-        messages.push(convertMessageItem(item));
+        messages.push(convertMessageItem(item, provider));
         continue;
       }
 
       if (item.type === "message") {
-        messages.push(convertMessageItem(item));
+        messages.push(convertMessageItem(item, provider));
       } else if (item.type === "function_call") {
         messages.push({
           role: "assistant",
@@ -120,7 +120,7 @@ function convertInputToMessages(requestBody) {
   return messages;
 }
 
-function convertMessageItem(item) {
+function convertMessageItem(item, provider) {
   const role = item.role || "user";
   if (typeof item.content === "string") {
     return { role, content: item.content };
@@ -132,6 +132,7 @@ function convertMessageItem(item) {
       if (p.type === "input_text" || p.type === "output_text" || p.type === "text") {
         parts.push({ type: "text", text: p.text || "" });
       } else if (p.type === "input_image") {
+        if (provider && provider.vision === false) continue;
         const imageUrl = typeof p.image_url === "string" ? p.image_url : (p.image_url && p.image_url.url) || "";
         if (imageUrl) {
           parts.push({ type: "image_url", image_url: { url: imageUrl, detail: p.detail || "auto" } });
