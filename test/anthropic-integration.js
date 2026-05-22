@@ -23,10 +23,10 @@ function assert(condition, message) {
 function createMockAnthropicServer() {
   return new Promise((resolve) => {
     mockServer = http.createServer((req, res) => {
-      let body = "";
-      req.on("data", (chunk) => { body += chunk; });
+      let _body = "";
+      req.on("data", (chunk) => { _body += chunk; });
       req.on("end", () => {
-        const data = JSON.parse(body);
+        const data = JSON.parse(_body);
 
         if (data.stream) {
           res.writeHead(200, { "Content-Type": "text/event-stream" });
@@ -178,8 +178,8 @@ async function testAnthropicToolUse() {
   await delay(100);
   await new Promise((resolve) => {
     mockServer = http.createServer((req, res) => {
-      let body = "";
-      req.on("data", (chunk) => { body += chunk; });
+      let _body = "";
+      req.on("data", (chunk) => { _body += chunk; });
       req.on("end", () => {
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({

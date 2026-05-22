@@ -1,7 +1,7 @@
 "use strict";
 
 const http = require("node:http");
-const { createProxyServer, stopProxyServer, getStatus } = require("../src/proxy/server");
+const { createProxyServer, stopProxyServer } = require("../src/proxy/server");
 
 const PROXY_PORT = 19787;
 const MOCK_PORT = 19788;
@@ -161,7 +161,6 @@ async function testNoProvider() {
 function parseSSEEvents(raw) {
   const events = [];
   const lines = raw.split("\n");
-  let currentData = "";
   for (const line of lines) {
     if (line.startsWith("data: ")) {
       const payload = line.slice(6).trim();
