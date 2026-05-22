@@ -18,13 +18,16 @@
     return text;
   }
 
-  const PRESETS = [
-    { name: "OpenAI", protocol: "openai-chat", baseUrl: "https://api.openai.com/v1", model: "gpt-4o" },
-    { name: "Anthropic", protocol: "anthropic", baseUrl: "https://api.anthropic.com", model: "claude-sonnet-4-20250514" },
-    { name: "DeepSeek", protocol: "openai-chat", baseUrl: "https://api.deepseek.com/v1", model: "deepseek-chat" },
-    { name: "Groq", protocol: "openai-chat", baseUrl: "https://api.groq.com/openai/v1", model: "llama-3.3-70b-versatile" },
-    { name: "Together", protocol: "openai-chat", baseUrl: "https://api.together.xyz/v1", model: "meta-llama/Llama-3.3-70B-Instruct-Turbo" },
-  ];
+  let PRESETS = [];
+  let selectedPreset = null; // preset id chosen in the dialog
+
+  (async function loadPresets() {
+    if (api && api.getPresets) {
+      try {
+        PRESETS = await api.getPresets();
+      } catch { /* keep empty */ }
+    }
+  })();
 
   function applyTranslations() {
     document.querySelectorAll("[data-i18n]").forEach((el) => {
@@ -394,6 +397,7 @@
       title: t("dialogEditTitle"),
       name: p.name, protocol: p.protocol, baseUrl: p.baseUrl, apiKey: p.apiKey, model: p.model,
       vision: p.vision !== false, imageGen: p.imageGen !== false,
+      preset: p.preset || "",
     });
   }
 
@@ -408,6 +412,7 @@
       document.body.appendChild(dialog);
     }
 
+    selectedPreset = data.preset || null;
     dialog.setAttribute("aria-labelledby", "dialog-title");
 
     dialog.innerHTML = '<div class="dialog">' +
@@ -440,13 +445,25 @@
     dialog.querySelectorAll(".btn-preset").forEach((btn) => {
       btn.addEventListener("click", () => {
         const preset = PRESETS[Number(btn.dataset.preset)];
-        document.getElementById("dlg-name").value = preset.name;
-        document.getElementById("dlg-protocol").value = preset.protocol;
-        document.getElementById("dlg-baseurl").value = preset.baseUrl;
-        document.getElementById("dlg-model").value = preset.model;
+        selectedPreset = preset.id || null;
+        document.getElementById("dlg-name").value = preset.name || "";
+        document.getElementById("dlg-protocol").value = preset.protocol || "openai-chat";
+        document.getElementById("dlg-baseurl").value = preset.baseUrl || "";
+        document.getElementById("dlg-model").value = (preset.models && preset.models[0]) || "";
         document.getElementById("dlg-apikey").value = "";
       });
     });
+
+    // Auto-switch baseUrl when protocol changes (vendor variant support)
+    const protoSelect = dialog.querySelector("#dlg-protocol");
+    protoSelect.addEventListener("change", function () {
+      if (!selectedPreset || !api || !api.getVariantBaseUrl) return;
+      const fakeProvider = { preset: selectedPreset, baseUrl: "" };
+      api.getVariantBaseUrl(fakeProvider, protoSelect.value).then(function (url) {
+        if (url) document.getElementById("dlg-baseurl").value = url;
+      });
+    });
+
     dialog.addEventListener("mousedown", (e) => { if (e.target === dialog) closeDialog(); });
 
     document.addEventListener("keydown", handleDialogKeydown);
@@ -468,6 +485,7 @@
     const dialog = document.getElementById("provider-dialog");
     if (!dialog) return;
     dialog.style.display = "none";
+    selectedPreset = null;
     document.removeEventListener("keydown", handleDialogKeydown);
     if (dialog._prevFocus && typeof dialog._prevFocus.focus === "function") {
       dialog._prevFocus.focus();
@@ -489,7 +507,7 @@
     if (!apiKey) { showToast(t("toastKeyRequired"), "error"); return; }
     if (!model) { showToast(t("toastModelRequired"), "error"); return; }
 
-    const entry = { name, protocol, baseUrl, apiKey, model, vision, imageGen, active: false };
+    const entry = { name, protocol, baseUrl, apiKey, model, vision, imageGen, active: false, preset: selectedPreset || "" };
     let wasActive = false;
     if (editingIndex >= 0) {
       wasActive = providers[editingIndex].active;

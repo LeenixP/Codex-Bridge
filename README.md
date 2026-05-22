@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/github/license/LeenixP/Codex-Switch)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/LeenixP/Codex-Switch)](https://github.com/LeenixP/Codex-Switch/releases)
 
-Codex 桌面应用的本地协议桥接工具 —— 将 OpenAI Chat 和 Anthropic API 转换为 OpenAI Responses 格式。
+Codex Desktop / CLI 的本地协议桥接工具 —— 将 OpenAI Chat 和 Anthropic API 转换为 OpenAI Responses 格式。
 
 </div>
 
@@ -22,14 +22,15 @@ Codex Desktop  →  localhost:8629  →  Codex-Switch  →  上游 API
 ## 功能
 
 - **多协议支持** — OpenAI Chat Completions 与 Anthropic Messages API
+- **厂商预设** — DeepSeek 等厂商内置专属优化（reasoning 回传、双端点切换）；新增厂商只需添加数据条目
 - **流式传输** — 完整 SSE 流式响应，实时文本、推理和工具调用事件
 - **思考 / 推理** — Anthropic extended thinking 映射为 Codex reasoning 面板展示
 - **工具调用** — 双向工具调用转换（`function_call` ↔ `tool_use`）
 - **多模态支持** — 图片输入透传至 OpenAI 和 Anthropic
 - **Provider 管理** — 添加、编辑、删除、切换多个 API 供应商
-- **预设一键添加** — OpenAI、Anthropic、DeepSeek、Groq、Together
+- **事件追踪** — 实时请求日志，包含模型、协议、成功/失败状态
 - **系统托盘** — 后台运行，右键菜单快速切换供应商
-- **Codex 集成** — 一键注入配置到 `~/.codex/config.toml`，可随时移除
+- **Codex 集成** — 侧边栏一键启动代理并注入配置；供应商变更自动提醒重启
 - **跨平台** — Windows、macOS、Linux（x64 + arm64）
 
 ## 安装
@@ -45,11 +46,11 @@ Codex Desktop  →  localhost:8629  →  Codex-Switch  →  上游 API
 ## 使用
 
 1. 启动 Codex-Switch
-2. 添加 Provider（选择协议、填写 API Key 和模型名）
-3. 在设置中点击「注入配置到 Codex」
+2. 添加 Provider（选择预设或自定义、填写 API Key 和模型名）
+3. 侧边栏点击「启动代理」—— 自动注入配置并开始监听
 4. 启动 Codex —— 请求将通过你配置的 Provider 路由
 
-> 注入的配置使用 `# --- Codex-Switch managed section ---` 标记隔离，不会影响 Codex 原有设置。点击「移除配置」即可恢复。
+> 配置通过 `# --- Codex-Switch managed section ---` 隔离，不会影响 Codex 原有设置。停止代理即自动还原。
 
 ## 开发
 
@@ -82,8 +83,9 @@ src/
 ├── electron/       # 桌面外壳（窗口、托盘、IPC）
 ├── proxy/          # HTTP 代理服务器
 │   ├── core/       # 编排器、SSE 桥接、事件模型
-│   └── adapters/   # 协议适配器（openai-chat、anthropic）
-├── codex/          # Codex 配置集成
+│   ├── adapters/   # 协议适配器（openai-chat、anthropic）
+│   └── presets/    # 厂商预设注册表（DeepSeek 等厂商专属优化）
+├── codex/          # Codex 配置注入
 ├── ui/             # 管理面板（HTML/CSS/JS）
 │   └── assets/     # 图标资源
 └── shared/         # 配置、日志、工具函数

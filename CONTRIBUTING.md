@@ -41,6 +41,48 @@ npm run dist:mac     # Build macOS packages
 4. Write a clear PR description explaining what and why.
 5. Keep changes focused — one feature or fix per PR.
 
+## Adding a New Provider Preset
+
+Presets let you pre-configure a vendor's API endpoint and add vendor-specific behavior without touching the generic adapters. Add presets in `src/proxy/presets/index.js`.
+
+Adding a simple preset (no special behavior):
+
+```js
+"ali-bailian": {
+  id: "ali-bailian",
+  name: "阿里百炼",
+  protocol: "openai-chat",
+  baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  features: {},
+},
+```
+
+Adding a preset with special behavior:
+
+```js
+"deepseek": {
+  id: "deepseek",
+  name: "DeepSeek",
+  protocol: "openai-chat",
+  baseUrl: "https://api.deepseek.com/v1",
+  variants: {
+    "openai-chat": "https://api.deepseek.com/v1",
+    anthropic: "https://api.deepseek.com/anthropic",
+  },
+  features: {
+    reasoningPassthrough: true,
+  },
+  hooks: {
+    onMessagesBuilt(messages, requestBody, provider) {
+      // Transform messages before sending to upstream
+      return messages;
+    },
+  },
+},
+```
+
+The preset will automatically appear in the "Quick Add" buttons in the Add Provider dialog.
+
 ## Adding a New Protocol Adapter
 
 1. Create a new file in `src/proxy/adapters/`.

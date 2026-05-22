@@ -168,7 +168,7 @@ function injectCodexConfig(proxyPort, providers) {
     "# original_model = \"" + origModel + "\"",
     "",
     "[model_providers." + providerId + "]",
-    'name = "' + activeProvider.name + '"',
+    'name = "' + activeProvider.name + ' (Codex-Switch)"',
     'wire_api = "responses"',
     "requires_openai_auth = true",
     'base_url = "http://127.0.0.1:' + proxyPort + '/v1"',

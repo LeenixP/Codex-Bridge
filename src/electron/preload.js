@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld("codexSwitch", {
   setThemeSource: (theme) => ipcRenderer.invoke("set-theme-source", theme),
   getAppVersion: () => ipcRenderer.invoke("get-app-version"),
   checkForUpdates: () => ipcRenderer.invoke("check-for-updates"),
+  getPresets: () => ipcRenderer.invoke("get-presets"),
+  getVariantBaseUrl: (provider, protocol) => ipcRenderer.invoke("get-variant-baseurl", provider, protocol),
   onProxyStatusChange: (callback) => {
     ipcRenderer.on("proxy-status-changed", (_, status) => callback(status));
   },

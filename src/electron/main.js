@@ -5,6 +5,7 @@ const path = require("node:path");
 const { loadSettings, saveSettings, loadProviders, saveProviders } = require("../shared/config");
 const { createProxyServer, stopProxyServer, getStatus, getLastError } = require("../proxy/server");
 const { injectCodexConfig, removeCodexConfig } = require("../codex/catalog");
+const { getQuickPresets, getVariantBaseUrl } = require("../proxy/presets");
 const log = require("../shared/logger");
 
 const PRODUCT_NAME = "Codex-Switch";
@@ -88,6 +89,10 @@ function registerIpcHandlers() {
   });
   ipcMain.handle("set-theme-source", (_, theme) => {
     nativeTheme.themeSource = theme;
+  });
+  ipcMain.handle("get-presets", () => getQuickPresets());
+  ipcMain.handle("get-variant-baseurl", (_, provider, protocol) => {
+    return getVariantBaseUrl(provider, protocol);
   });
   ipcMain.handle("get-app-version", () => {
     return app.getVersion();

@@ -3,14 +3,19 @@
 const { makeId } = require("../../shared/http");
 const { createSseBridge } = require("./sse-bridge");
 const { errorEvent } = require("./events");
+const { getHooks } = require("../presets");
+const log = require("../../shared/logger");
 
 async function orchestrate(req, res, requestBody, provider, settings) {
   const responseId = makeId("resp");
   const model = requestBody.model || provider.model || "unknown";
   const stream = requestBody.stream !== false;
 
+  log.info("Request → " + provider.name + " | model=" + model + " | stream=" + stream, { provider: provider.name, requestId: responseId });
+
   const adapter = resolveAdapter(provider.protocol);
   if (!adapter) {
+    log.error("Unsupported protocol: " + provider.protocol, { provider: provider.name, requestId: responseId });
     res.writeHead(400, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: { message: "Unsupported protocol: " + provider.protocol, type: "invalid_request_error", code: "unsupported_protocol" } }));
     return;
@@ -18,13 +23,23 @@ async function orchestrate(req, res, requestBody, provider, settings) {
 
   const upstreamRequest = adapter.buildUpstreamRequest(requestBody, provider, settings);
 
+  // Run vendor preset hooks (e.g. DeepSeek reasoning_content passthrough)
+  const hooks = getHooks(provider);
+  if (hooks && hooks.onMessagesBuilt) {
+    upstreamRequest.messages = hooks.onMessagesBuilt(
+      upstreamRequest.messages, requestBody, provider
+    );
+  }
+
   if (stream) {
     const bridge = createSseBridge(res, responseId, model);
     try {
       await adapter.streamUpstream(upstreamRequest, provider, (event) => {
         bridge.handleEvent(event);
       });
+      log.info("Stream done — " + provider.name + " | model=" + model, { provider: provider.name, requestId: responseId });
     } catch (err) {
+      log.error("Stream failed: " + err.message, { provider: provider.name, requestId: responseId });
       bridge.handleEvent(errorEvent(err.message || "Upstream request failed", "upstream_error"));
     }
   } else {
@@ -33,7 +48,9 @@ async function orchestrate(req, res, requestBody, provider, settings) {
       const response = buildSyncResponse(responseId, model, result);
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify(response));
+      log.info("Sync response — " + provider.name + " | model=" + model, { provider: provider.name, requestId: responseId });
     } catch (err) {
+      log.error("Sync request failed: " + err.message, { provider: provider.name, requestId: responseId });
       res.writeHead(err.statusCode || 502, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: { message: err.message || "Upstream request failed", type: "api_error", code: "upstream_error" } }));
     }
