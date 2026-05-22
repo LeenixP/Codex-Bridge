@@ -1,0 +1,96 @@
+"use strict";
+
+const { makeId } = require("../../shared/http");
+const { createSseBridge } = require("./sse-bridge");
+const { responseCompletedEvent, errorEvent } = require("./events");
+
+async function orchestrate(req, res, requestBody, provider, settings) {
+  const responseId = makeId("resp");
+  const model = requestBody.model || provider.model || "unknown";
+  const stream = requestBody.stream !== false;
+
+  const adapter = resolveAdapter(provider.protocol);
+  if (!adapter) {
+    const { sendJson } = require("../server");
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: { message: "Unsupported protocol: " + provider.protocol, type: "invalid_request_error", code: "unsupported_protocol" } }));
+    return;
+  }
+
+  const upstreamRequest = adapter.buildUpstreamRequest(requestBody, provider, settings);
+
+  if (stream) {
+    const bridge = createSseBridge(res, responseId, model);
+    try {
+      await adapter.streamUpstream(upstreamRequest, provider, (event) => {
+        bridge.handleEvent(event);
+      });
+    } catch (err) {
+      bridge.handleEvent(errorEvent(err.message || "Upstream request failed", "upstream_error"));
+    }
+  } else {
+    try {
+      const result = await adapter.callUpstream(upstreamRequest, provider);
+      const response = buildSyncResponse(responseId, model, result);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(response));
+    } catch (err) {
+      res.writeHead(502, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: { message: err.message || "Upstream request failed", type: "api_error", code: "upstream_error" } }));
+    }
+  }
+}
+
+function resolveAdapter(protocol) {
+  if (protocol === "openai-chat" || protocol === "openai") {
+    return require("../adapters/openai-chat");
+  }
+  if (protocol === "anthropic") {
+    return require("../adapters/anthropic");
+  }
+  return null;
+}
+
+function buildSyncResponse(responseId, model, result) {
+  const output = [];
+  if (result.reasoning) {
+    output.push({
+      id: makeId("rs"),
+      type: "reasoning",
+      status: "completed",
+      summary: [{ type: "summary_text", text: result.reasoning }],
+    });
+  }
+  if (result.text) {
+    output.push({
+      id: makeId("msg"),
+      type: "message",
+      role: "assistant",
+      status: "completed",
+      content: [{ type: "output_text", text: result.text, annotations: [] }],
+    });
+  }
+  if (result.toolCalls && result.toolCalls.length > 0) {
+    for (const tc of result.toolCalls) {
+      output.push({
+        id: makeId("fc"),
+        type: "function_call",
+        call_id: tc.id || makeId("call"),
+        name: tc.name,
+        status: "completed",
+        arguments: tc.arguments || "{}",
+      });
+    }
+  }
+  return {
+    id: responseId,
+    object: "response",
+    created_at: Math.floor(Date.now() / 1000),
+    model,
+    status: "completed",
+    output,
+    usage: result.usage || null,
+  };
+}
+
+module.exports = { orchestrate };

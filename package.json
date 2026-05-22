@@ -1,0 +1,105 @@
+{
+  "name": "codex-switch",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Protocol bridge for Codex desktop — converts OpenAI Chat and Anthropic APIs to OpenAI Responses format.",
+  "author": "LeenixP",
+  "license": "MIT",
+  "homepage": "https://github.com/LeenixP/Codex-Switch",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LeenixP/Codex-Switch.git"
+  },
+  "main": "src/electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "check": "node --check src/electron/main.js && node --check src/electron/preload.js && node --check src/shared/config.js && node --check src/shared/http.js && node --check src/proxy/server.js && node --check src/proxy/core/events.js && node --check src/proxy/core/sse-bridge.js && node --check src/proxy/core/orchestrator.js && node --check src/proxy/adapters/openai-chat.js && node --check src/proxy/adapters/anthropic.js && node --check src/codex/catalog.js",
+    "test": "node test/proxy-integration.js && node test/anthropic-integration.js",
+    "icons": "node scripts/generate-icons.js",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:linux": "electron-builder --linux",
+    "dist:mac": "electron-builder --mac"
+  },
+  "build": {
+    "appId": "io.github.leenixp.codex-switch",
+    "productName": "Codex-Switch",
+    "copyright": "Copyright 2026 LeenixP",
+    "asar": true,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json",
+      "LICENSE"
+    ],
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "win": {
+      "icon": "src/ui/assets/icons/app.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "${productName}-${version}-Windows_Setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "mac": {
+      "icon": "src/ui/assets/icons/app-512.png",
+      "category": "public.app-category.developer-tools",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["universal"]
+        },
+        {
+          "target": "tar.gz",
+          "arch": ["universal"]
+        },
+        {
+          "target": "zip",
+          "arch": ["universal"]
+        }
+      ],
+      "artifactName": "${productName}-${version}-macOS.${ext}"
+    },
+    "linux": {
+      "icon": "src/ui/assets/icons/app.png",
+      "category": "Development",
+      "maintainer": "LeenixP <lipeng.dev@163.com>",
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "artifactName": "${productName}-${version}-Linux-${arch}.${ext}"
+    },
+    "publish": null
+  },
+  "devDependencies": {
+    "electron": "^42.0.1",
+    "electron-builder": "^26.8.1",
+    "sharp": "^0.34.5"
+  },
+  "dependencies": {
+    "undici": "^7.25.0"
+  }
+}

@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self';">
+  <title>Codex-Switch</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <aside id="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <div class="logo-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect width="24" height="24" rx="4.5" fill="#fff"/>
+              <path d="M6.8 8.6a.6.6 0 01.93-.8l2.1 2.45a.6.6 0 01-.01.8l-2.1 2.35a.6.6 0 01-.84.02.6.6 0 01-.02-.85l1.6-1.82-1.66-2.15z" fill="url(#sig)"/>
+              <path d="M17.2 8.6a.6.6 0 00-.93-.8l-2.1 2.45a.6.6 0 00.01.8l2.1 2.35a.6.6 0 00.84.02.6.6 0 00.02-.85l-1.6-1.82 1.66-2.15z" fill="url(#sig)"/>
+              <path d="M10.8 5.8l1.2-.7 1.2.7V5a.55.55 0 00-.82-.48L11.2 5.2a.55.55 0 00-.4.5v.1zm0 .1v1.6l1.2.7 1.2-.7V5.9l-1.2.7-1.2-.7z" fill="url(#sig)"/>
+              <path d="M13.2 18.2l-1.2.7-1.2-.7V19a.55.55 0 00.82.48l1.18-.72a.55.55 0 00.4-.5v-.06zm0-.1v-1.6l-1.2-.7-1.2.7v1.6l1.2-.7 1.2.7z" fill="url(#sig)"/>
+              <circle cx="9.2" cy="12" r=".65" fill="url(#sig)"/>
+              <circle cx="14.8" cy="12" r=".65" fill="url(#sig)"/>
+              <defs><linearGradient id="sig" x1="12" y1="3" x2="12" y2="21" gradientUnits="userSpaceOnUse"><stop stop-color="#B8AEFF"/><stop offset=".5" stop-color="#6B8FFF"/><stop offset="1" stop-color="#2D38EE"/></linearGradient></defs>
+            </svg>
+          </div>
+          <div>
+            <div class="logo-text">Codex-Switch</div>
+            <div class="logo-subtitle">Protocol Bridge</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="proxy-status stopped" id="proxy-status">
+        <span class="status-dot"></span>
+        <span class="status-text">Proxy Stopped</span>
+      </div>
+
+      <nav class="sidebar-nav">
+        <button class="nav-item active" data-page="providers">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 7h-9M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>
+          </svg>
+          <span>Providers</span>
+        </button>
+        <button class="nav-item" data-page="settings">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+          <span>Settings</span>
+        </button>
+        <button class="nav-item" data-page="logs">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+          </svg>
+          <span>Logs</span>
+        </button>
+        <button class="nav-item" data-page="about">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+          <span>About</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        Open-source protocol bridge for Codex desktop.
+      </div>
+    </aside>
+
+    <main id="content">
+      <!-- Providers Page -->
+      <section id="page-providers" class="page active">
+        <div class="page-header">
+          <div>
+            <h1>Providers</h1>
+            <p class="page-subtitle">Manage API providers for protocol bridging.</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-primary" id="btn-add-provider">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Add Provider
+            </button>
+          </div>
+        </div>
+        <div class="provider-list" id="provider-list">
+          <div class="empty-state">
+            <p>No providers configured yet.</p>
+            <p>Click "Add Provider" to get started.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Settings Page -->
+      <section id="page-settings" class="page">
+        <div class="page-header">
+          <div>
+            <h1>Settings</h1>
+            <p class="page-subtitle">Configure proxy behavior and appearance.</p>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header"><h2>Proxy</h2></div>
+          <div class="panel-body settings-panel">
+            <div class="setting-item">
+              <span>Listen port<small>Restart required after changing.</small></span>
+              <input type="number" id="setting-port" class="inline-control" value="8787" min="1024" max="65535" style="width: 120px;">
+            </div>
+            <div class="setting-divider"></div>
+            <div class="setting-item">
+              <span>Auto-start proxy<small>Start proxy when application launches.</small></span>
+              <label class="toggle-switch">
+                <input type="checkbox" id="setting-autostart" checked>
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="setting-divider"></div>
+            <div class="setting-item">
+              <label>Thinking visibility</label>
+              <div class="segmented-control">
+                <input type="radio" name="thinking" id="thinking_visible" value="visible" checked>
+                <label for="thinking_visible">Visible</label>
+                <input type="radio" name="thinking" id="thinking_hidden" value="hidden">
+                <label for="thinking_hidden">Hidden</label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header"><h2>Appearance</h2></div>
+          <div class="panel-body settings-panel">
+            <div class="setting-item">
+              <label>Theme</label>
+              <div class="segmented-control">
+                <input type="radio" name="theme" id="theme_dark" value="dark" checked>
+                <label for="theme_dark">Dark</label>
+                <input type="radio" name="theme" id="theme_light" value="light">
+                <label for="theme_light">Light</label>
+                <input type="radio" name="theme" id="theme_system" value="system">
+                <label for="theme_system">System</label>
+              </div>
+            </div>
+            <div class="setting-divider"></div>
+            <div class="setting-item">
+              <label>Close behavior</label>
+              <div class="segmented-control">
+                <input type="radio" name="close" id="close_tray" value="tray" checked>
+                <label for="close_tray">Minimize to tray</label>
+                <input type="radio" name="close" id="close_exit" value="exit">
+                <label for="close_exit">Exit</label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="integration-card">
+          <div class="integration-card-header">
+            <h3>Codex Integration</h3>
+          </div>
+          <div class="integration-card-body">
+            <p class="integration-hint">Inject proxy configuration into <code>~/.codex/config.toml</code> so Codex routes requests through Codex-Switch.</p>
+            <div class="btn-group">
+              <button class="btn btn-primary" id="btn-inject-codex">Inject Config</button>
+              <button class="btn btn-secondary" id="btn-remove-codex">Remove Config</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Logs Page -->
+      <section id="page-logs" class="page">
+        <div class="page-header">
+          <div>
+            <h1>Event Trace</h1>
+            <p class="page-subtitle">Real-time proxy request and response events.</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-secondary" id="btn-clear-logs">Clear</button>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-body">
+            <div class="log-list" id="log-list">
+              <div class="empty-state"><p>No log entries yet.</p></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- About Page -->
+      <section id="page-about" class="page">
+        <div class="page-header">
+          <div>
+            <h1>About</h1>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-body about-hero">
+            <div class="about-mark">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect width="24" height="24" rx="4.5" fill="#fff"/>
+                <path d="M6.8 8.6a.6.6 0 01.93-.8l2.1 2.45a.6.6 0 01-.01.8l-2.1 2.35a.6.6 0 01-.84.02.6.6 0 01-.02-.85l1.6-1.82-1.66-2.15z" fill="url(#ag)"/>
+                <path d="M17.2 8.6a.6.6 0 00-.93-.8l-2.1 2.45a.6.6 0 00.01.8l2.1 2.35a.6.6 0 00.84.02.6.6 0 00.02-.85l-1.6-1.82 1.66-2.15z" fill="url(#ag)"/>
+                <path d="M10.8 5.8l1.2-.7 1.2.7V5a.55.55 0 00-.82-.48L11.2 5.2a.55.55 0 00-.4.5v.1zm0 .1v1.6l1.2.7 1.2-.7V5.9l-1.2.7-1.2-.7z" fill="url(#ag)"/>
+                <path d="M13.2 18.2l-1.2.7-1.2-.7V19a.55.55 0 00.82.48l1.18-.72a.55.55 0 00.4-.5v-.06zm0-.1v-1.6l-1.2-.7-1.2.7v1.6l1.2-.7 1.2.7z" fill="url(#ag)"/>
+                <circle cx="9.2" cy="12" r=".65" fill="url(#ag)"/>
+                <circle cx="14.8" cy="12" r=".65" fill="url(#ag)"/>
+                <defs><linearGradient id="ag" x1="12" y1="3" x2="12" y2="21" gradientUnits="userSpaceOnUse"><stop stop-color="#B8AEFF"/><stop offset=".5" stop-color="#6B8FFF"/><stop offset="1" stop-color="#2D38EE"/></linearGradient></defs>
+              </svg>
+            </div>
+            <div>
+              <span class="eyebrow">Protocol Bridge</span>
+              <h2>Codex-Switch</h2>
+              <p>Local protocol bridge for Codex desktop — converts OpenAI Chat and Anthropic APIs to Responses format.</p>
+              <div class="version-pill" id="app-version">v0.1.0</div>
+              <div class="about-links">
+                <button class="btn btn-secondary" id="link-github">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
+                  Source
+                </button>
+                <button class="btn btn-secondary" id="link-issues">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  Feedback
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
