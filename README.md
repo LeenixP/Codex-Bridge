@@ -1,5 +1,9 @@
 # Codex-Switch
 
+[![CI](https://github.com/LeenixP/Codex-Switch/actions/workflows/ci.yml/badge.svg)](https://github.com/LeenixP/Codex-Switch/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/LeenixP/Codex-Switch)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/LeenixP/Codex-Switch)](https://github.com/LeenixP/Codex-Switch/releases)
+
 Codex 桌面应用的协议桥接工具 — 将 OpenAI Chat 和 Anthropic API 转换为 OpenAI Responses 格式。
 
 ## 说明
@@ -77,6 +81,28 @@ src/
 ├── ui/             # 管理面板（HTML/CSS/JS）
 └── shared/         # 配置、工具函数
 ```
+
+## 故障排除
+
+| 问题 | 解决方案 |
+|------|------|
+| 代理无法启动 | 检查端口 8629 是否被占用 |
+| Codex 未通过代理路由 | 重新点击「注入配置」，确认 `~/.codex/config.toml` 包含 `[model_providers.codex-switch]` |
+| 连接测试失败 | 验证 API Key 和 Base URL，确认上游服务可达 |
+| 代理启动后 Codex 不识别模型 | 检查 `~/.codex/auth.json` 是否包含 `OPENAI_API_KEY` |
+
+## 贡献
+
+欢迎贡献！详见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
+## 致谢
+
+本项目参考了以下优秀项目：
+
+- [CodeSeeX](https://github.com/tastesteak/codeseex) — Codex 协议桥接与模型管理
+- [cc-switch](https://github.com/RadiaxJ/cc-switch) — Tauri 实现的 Codex 代理切换工具
+
+特别感谢 [@tastesteak](https://github.com/tastesteak) 和 [@RadiaxJ](https://github.com/RadiaxJ) 在协议适配和配置文件注入方面的开创性工作。
 
 ## 许可证
 

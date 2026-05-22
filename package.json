@@ -13,8 +13,11 @@
   "main": "src/electron/main.js",
   "scripts": {
     "start": "electron .",
-    "check": "node --check src/electron/main.js && node --check src/electron/preload.js && node --check src/shared/config.js && node --check src/shared/http.js && node --check src/proxy/server.js && node --check src/proxy/core/events.js && node --check src/proxy/core/sse-bridge.js && node --check src/proxy/core/orchestrator.js && node --check src/proxy/adapters/openai-chat.js && node --check src/proxy/adapters/anthropic.js && node --check src/codex/catalog.js",
-    "test": "node test/proxy-integration.js && node test/anthropic-integration.js",
+    "check": "node scripts/check-syntax.js",
+    "test": "node test/proxy-integration.js && node test/anthropic-integration.js && node test/error-paths.js && node test/format-conversion.js",
+    "lint": "eslint src/ test/",
+    "format": "prettier --write \"src/**/*.js\" \"test/**/*.js\"",
+    "format:check": "prettier --check \"src/**/*.js\" \"test/**/*.js\"",
     "icons": "node scripts/generate-icons.js",
     "dist": "electron-builder",
     "dist:win": "electron-builder --win",
@@ -97,6 +100,8 @@
   "devDependencies": {
     "electron": "^42.0.1",
     "electron-builder": "^26.8.1",
+    "eslint": "^9.0.0",
+    "prettier": "^3.5.0",
     "sharp": "^0.34.5"
   },
   "dependencies": {
