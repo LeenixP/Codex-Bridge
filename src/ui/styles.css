@@ -4,7 +4,7 @@
   --hover-bg: #f8fafc;
   --text-main: #111827;
   --text-secondary: #4b5563;
-  --text-muted: #9ca3af;
+  --text-muted: #6b7280;
   --border-color: #e5e7eb;
 
   --primary: #0f172a;
@@ -37,7 +37,7 @@
   --hover-bg: #202026;
   --text-main: #f4f4f5;
   --text-secondary: #a1a1aa;
-  --text-muted: #71717a;
+  --text-muted: #a1a1aa;
   --border-color: #222227;
 
   --primary: #f4f4f5;
@@ -55,9 +55,12 @@
   --overlay-bg: rgba(0, 0, 0, 0.7);
 }
 
-* { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg-app); color: var(--text-main); height: 100vh; display: flex; flex-direction: column; overflow: hidden; -webkit-font-smoothing: antialiased; transition: var(--transition); }
-.selectable, .selectable * { user-select: text !important; -webkit-user-select: text !important; }
+
+/* Focus visible: show ring only for keyboard navigation */
+*:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; border-radius: 2px; }
+*:focus:not(:focus-visible) { outline: none; }
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -130,13 +133,14 @@ body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg-a
 .provider-info { flex: 1; min-width: 0; }
 .provider-name { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
 .provider-detail { font-size: 13px; color: var(--text-secondary); margin-top: 3px; display: flex; align-items: center; gap: 8px; }
-.provider-url { font-size: 12px; color: var(--text-muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 400px; }
+.provider-url { font-size: 12px; color: var(--text-muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 400px; user-select: text; }
 
 .protocol-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; background: var(--ctrl-bg); color: var(--text-secondary); border: 1px solid var(--border-color); }
 .status-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
 .status-badge.active { background: var(--success-bg); color: var(--success); }
 
-.provider-actions { display: flex; gap: 6px; opacity: 0; transition: opacity 0.15s; }
+.provider-actions { display: flex; gap: 6px; transition: opacity 0.15s; }
+.provider-card:focus-within .provider-actions,
 .provider-card:hover .provider-actions { opacity: 1; }
 
 .btn-icon { width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border-color); background: var(--bg-panel); color: var(--text-secondary); border-radius: var(--radius-sm); cursor: pointer; transition: var(--transition); padding: 0; }
@@ -181,7 +185,7 @@ select.inline-control { padding-right: 28px; }
 .integration-hint { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
 
 /* Logs */
-.log-list { font-family: "SF Mono", "Fira Code", Consolas, monospace; font-size: 12px; display: flex; flex-direction: column; gap: 2px; max-height: 500px; overflow-y: auto; }
+.log-list { font-family: "SF Mono", "Fira Code", Consolas, monospace; font-size: 12px; display: flex; flex-direction: column; gap: 2px; flex: 1; min-height: 0; overflow-y: auto; }
 .log-entry { padding: 8px 12px; background: var(--hover-bg); border-radius: var(--radius-sm); display: flex; gap: 10px; align-items: flex-start; transition: var(--transition); }
 .log-entry:hover { background: var(--ctrl-bg); }
 .log-time { color: var(--text-muted); flex-shrink: 0; font-size: 11px; }
@@ -241,4 +245,11 @@ select.inline-control { padding-right: 28px; }
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0s !important;
+    transition-duration: 0s !important;
+  }
 }

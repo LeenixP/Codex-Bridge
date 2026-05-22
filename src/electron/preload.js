@@ -14,8 +14,12 @@ contextBridge.exposeInMainWorld("codexSwitch", {
   testProvider: (provider) => ipcRenderer.invoke("test-provider", provider),
   injectCodexConfig: () => ipcRenderer.invoke("inject-codex-config"),
   removeCodexConfig: () => ipcRenderer.invoke("remove-codex-config"),
+  openExternal: (url) => ipcRenderer.invoke("open-external", url),
   onProxyStatusChange: (callback) => {
     ipcRenderer.on("proxy-status-changed", (_, status) => callback(status));
+  },
+  onLogEntry: (callback) => {
+    ipcRenderer.on("log-entry", (_, entry) => callback(entry));
   },
   platform: process.platform,
 });

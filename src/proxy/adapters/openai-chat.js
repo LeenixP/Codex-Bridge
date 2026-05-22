@@ -1,6 +1,7 @@
 "use strict";
 
 const { request } = require("undici");
+const { parseSSEStream } = require("../../shared/stream");
 const {
   reasoningDeltaEvent,
   textDeltaEvent,
@@ -11,7 +12,33 @@ const {
   errorEvent,
 } = require("../core/events");
 
-function buildUpstreamRequest(requestBody, provider, settings) {
+/**
+ * Build an OpenAI Chat Completions request from a Codex Responses API request body.
+ *
+ * Converts Responses-format input into Chat Completions messages, mapping:
+ *   instructions → system role message
+ *   max_output_tokens → max_completion_tokens
+ *   reasoning.effort → reasoning_effort
+ *   text.format → response_format (json_object / json_schema)
+ *   tools (function type) → tools array with function definitions
+ *   input_image content parts → image_url parts
+ *
+ * @param {object} requestBody - Codex Responses API request body
+ * @param {string} requestBody.model - Model ID
+ * @param {string|Array} requestBody.input - User input (string or content array)
+ * @param {string} [requestBody.instructions] - System instructions
+ * @param {boolean} [requestBody.stream=true] - Whether to stream
+ * @param {number} [requestBody.max_output_tokens] - Max completion tokens
+ * @param {number} [requestBody.temperature] - Sampling temperature
+ * @param {number} [requestBody.top_p] - Nucleus sampling parameter
+ * @param {object} [requestBody.reasoning] - Reasoning effort config
+ * @param {object} [requestBody.text] - Text format config
+ * @param {object[]} [requestBody.tools] - Tool definitions
+ * @param {object} provider - Provider configuration
+ * @param {string} provider.model - Default model override
+ * @returns {object} OpenAI Chat Completions request payload
+ */
+function buildUpstreamRequest(requestBody, provider, _settings) {
   const messages = convertInputToMessages(requestBody);
   const payload = {
     model: provider.model || requestBody.model,
@@ -99,10 +126,22 @@ function convertMessageItem(item) {
     return { role, content: item.content };
   }
   if (Array.isArray(item.content)) {
-    const textParts = item.content
-      .filter((p) => p && (p.type === "input_text" || p.type === "output_text" || p.type === "text"))
-      .map((p) => p.text || "");
-    return { role, content: textParts.join("") };
+    const parts = [];
+    for (const p of item.content) {
+      if (!p) continue;
+      if (p.type === "input_text" || p.type === "output_text" || p.type === "text") {
+        parts.push({ type: "text", text: p.text || "" });
+      } else if (p.type === "input_image") {
+        const imageUrl = typeof p.image_url === "string" ? p.image_url : (p.image_url && p.image_url.url) || "";
+        if (imageUrl) {
+          parts.push({ type: "image_url", image_url: { url: imageUrl, detail: p.detail || "auto" } });
+        }
+      }
+    }
+    if (parts.length === 1 && parts[0].type === "text") {
+      return { role, content: parts[0].text };
+    }
+    return { role, content: parts.length > 0 ? parts : "" };
   }
   return { role, content: "" };
 }
@@ -111,7 +150,14 @@ function convertResponseFormat(format) {
   if (!format) return undefined;
   if (format.type === "json_object") return { type: "json_object" };
   if (format.type === "json_schema") {
-    return { type: "json_schema", json_schema: format.json_schema || format.schema };
+    return {
+      type: "json_schema",
+      json_schema: {
+        name: format.name || "response",
+        strict: format.strict !== false,
+        schema: format.schema || {},
+      },
+    };
   }
   return undefined;
 }
@@ -129,6 +175,22 @@ function convertTools(tools) {
     }));
 }
 
+/**
+ * Stream an OpenAI Chat Completions request and emit Responses API SSE events.
+ *
+ * Parses SSE chunks from the upstream, tracking tool call state across deltas.
+ * Emits: reasoningDeltaEvent, textDeltaEvent, toolCallStartEvent,
+ *        toolCallArgsDeltaEvent, toolCallEndEvent, responseCompletedEvent, errorEvent.
+ *
+ * If the stream ends without [DONE], emits a stream_interrupted error.
+ *
+ * @param {object} upstreamPayload - Payload from buildUpstreamRequest
+ * @param {object} provider - Provider configuration
+ * @param {string} provider.baseUrl - API base URL
+ * @param {string} provider.apiKey - API key
+ * @param {function} emit - Callback receiving event objects (from events.js factory functions)
+ * @returns {Promise<void>}
+ */
 async function streamUpstream(upstreamPayload, provider, emit) {
   const baseUrl = (provider.baseUrl || "https://api.openai.com/v1").replace(/\/+$/, "");
   const url = baseUrl + "/chat/completions";
@@ -156,13 +218,13 @@ async function streamUpstream(upstreamPayload, provider, emit) {
 
   const toolCalls = {};
   let usage = null;
-  let hasReasoning = false;
+  let streamEndedCleanly = false;
 
   for await (const chunk of parseSSEStream(res.body)) {
-    if (chunk === "[DONE]") break;
+    if (chunk === "[DONE]") { streamEndedCleanly = true; break; }
 
     let data;
-    try { data = JSON.parse(chunk); } catch { continue; }
+    try { data = JSON.parse(chunk); } catch { console.warn("[openai-chat] unparseable SSE chunk"); continue; }
 
     if (data.usage) {
       usage = {
@@ -179,7 +241,6 @@ async function streamUpstream(upstreamPayload, provider, emit) {
 
     // Reasoning content (DeepSeek, o-series)
     if (delta.reasoning_content) {
-      hasReasoning = true;
       emit(reasoningDeltaEvent(delta.reasoning_content));
     }
 
@@ -209,6 +270,7 @@ async function streamUpstream(upstreamPayload, provider, emit) {
 
     // Finish
     if (choice.finish_reason) {
+      streamEndedCleanly = true;
       for (const [, tc] of Object.entries(toolCalls)) {
         if (tc.name) {
           emit(toolCallEndEvent(tc.id, tc.name, tc.args));
@@ -217,9 +279,24 @@ async function streamUpstream(upstreamPayload, provider, emit) {
     }
   }
 
+  if (!streamEndedCleanly) {
+    emit(errorEvent("Upstream stream ended unexpectedly", "stream_interrupted"));
+    return;
+  }
+
   emit(responseCompletedEvent(usage));
 }
 
+/**
+ * Make a non-streaming OpenAI Chat Completions request.
+ *
+ * Returns a structured result with text, reasoning, toolCalls, and usage fields.
+ * On error, throws an Error with a `statusCode` property set to the HTTP status.
+ *
+ * @param {object} upstreamPayload - Payload from buildUpstreamRequest
+ * @param {object} provider - Provider configuration
+ * @returns {Promise<{text: string, reasoning: string, toolCalls: Array, usage: object|null}>}
+ */
 async function callUpstream(upstreamPayload, provider) {
   const payload = Object.assign({}, upstreamPayload, { stream: false });
   const baseUrl = (provider.baseUrl || "https://api.openai.com/v1").replace(/\/+$/, "");
@@ -242,7 +319,9 @@ async function callUpstream(upstreamPayload, provider) {
   if (res.statusCode !== 200) {
     let msg = "Upstream returned HTTP " + res.statusCode;
     try { msg = JSON.parse(body).error.message || msg; } catch {}
-    throw new Error(msg);
+    const err = new Error(msg);
+    err.statusCode = res.statusCode;
+    throw err;
   }
 
   const data = JSON.parse(body);
@@ -274,28 +353,6 @@ async function callUpstream(upstreamPayload, provider) {
   return result;
 }
 
-async function* parseSSEStream(body) {
-  let buffer = "";
-  for await (const chunk of body) {
-    buffer += typeof chunk === "string" ? chunk : chunk.toString("utf8");
-    const lines = buffer.split("\n");
-    buffer = lines.pop() || "";
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith(":")) continue;
-      if (trimmed.startsWith("data: ")) {
-        const payload = trimmed.slice(6).trim();
-        if (payload) yield payload;
-      }
-    }
-  }
-  if (buffer.trim()) {
-    const trimmed = buffer.trim();
-    if (trimmed.startsWith("data: ")) {
-      yield trimmed.slice(6).trim();
-    }
-  }
-}
 
 module.exports = {
   buildUpstreamRequest,

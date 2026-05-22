@@ -8,6 +8,44 @@ const APP_NAME = "Codex-Switch";
 const DEFAULT_PORT = 8629;
 const DEFAULT_HOST = "127.0.0.1";
 
+// Lazy-load safeStorage — only available in Electron main process
+function getSafeStorage() {
+  try {
+    const { safeStorage } = require("electron");
+    if (safeStorage && safeStorage.isEncryptionAvailable()) {
+      return safeStorage;
+    }
+  } catch {}
+  return null;
+}
+
+const ENCRYPTED_PREFIX = "cs_enc_v1:";
+
+function encryptKey(plaintext) {
+  if (!plaintext) return plaintext;
+  const ss = getSafeStorage();
+  if (!ss) return plaintext;
+  try {
+    const buf = ss.encryptString(plaintext);
+    return ENCRYPTED_PREFIX + buf.toString("base64");
+  } catch {
+    return plaintext;
+  }
+}
+
+function decryptKey(stored) {
+  if (!stored || typeof stored !== "string") return stored || "";
+  if (!stored.startsWith(ENCRYPTED_PREFIX)) return stored;
+  const ss = getSafeStorage();
+  if (!ss) return stored;
+  try {
+    const buf = Buffer.from(stored.slice(ENCRYPTED_PREFIX.length), "base64");
+    return ss.decryptString(buf);
+  } catch {
+    return stored;
+  }
+}
+
 function getDataDir() {
   const platform = process.platform;
   if (platform === "win32") {
@@ -66,14 +104,23 @@ function saveSettings(settings) {
 function loadProviders() {
   const dataDir = getDataDir();
   const providersPath = path.join(dataDir, "providers.json");
-  return readJsonFile(providersPath, []);
+  const raw = readJsonFile(providersPath, []);
+  return raw.map((p) => {
+    if (p.apiKey) p.apiKey = decryptKey(p.apiKey);
+    return p;
+  });
 }
 
 function saveProviders(providers) {
   const dataDir = getDataDir();
   ensureDir(dataDir);
   const providersPath = path.join(dataDir, "providers.json");
-  writeJsonFile(providersPath, providers);
+  const toStore = providers.map((p) => {
+    const entry = Object.assign({}, p);
+    if (entry.apiKey) entry.apiKey = encryptKey(entry.apiKey);
+    return entry;
+  });
+  writeJsonFile(providersPath, toStore);
 }
 
 function getActiveProvider(providers) {
@@ -94,4 +141,6 @@ module.exports = {
   loadProviders,
   saveProviders,
   getActiveProvider,
+  encryptKey,
+  decryptKey,
 };

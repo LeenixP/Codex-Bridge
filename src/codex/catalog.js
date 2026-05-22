@@ -168,7 +168,7 @@ function injectCodexConfig(proxyPort, providers) {
     'base_url = "http://127.0.0.1:' + proxyPort + '/v1"',
     "",
     "[model_providers." + providerId + ".model_aliases]",
-    '"' + modelName + '" = "codex-switch-' + modelSlug + '"',
+    '"' + modelName + '" = "' + (activeProvider.model || modelName) + '"',
     endMarker,
     "",
   ].join("\n");

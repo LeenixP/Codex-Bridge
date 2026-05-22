@@ -1,8 +1,9 @@
 "use strict";
 
 const http = require("node:http");
-const { loadSettings, loadProviders, getActiveProvider } = require("../shared/config");
+const { getActiveProvider } = require("../shared/config");
 const { orchestrate } = require("./core/orchestrator");
+const log = require("../shared/logger");
 
 let server = null;
 let status = "stopped";
@@ -20,25 +21,41 @@ function createProxyServer(settings, providers) {
   server.on("error", (error) => {
     status = "error";
     lastError = error.message;
-    console.error("[proxy] Server error:", error.message);
+    log.error("Server error: " + error.message);
   });
 
   server.listen(port, host, () => {
     status = "running";
     lastError = "";
-    console.log("[proxy] Listening on http://" + host + ":" + port + "/v1");
+    log.info("Listening on http://" + host + ":" + port + "/v1");
   });
 
   return server;
 }
 
 function stopProxyServer() {
-  if (!server) return;
-  const closing = server;
-  server = null;
-  closing.close(() => {
-    status = "stopped";
-    console.log("[proxy] Stopped.");
+  if (!server) return Promise.resolve();
+  return new Promise((resolve) => {
+    const closing = server;
+    server = null;
+
+    // Force-close all connections so close callback fires promptly (Node 18+)
+    if (typeof closing.closeAllConnections === "function") {
+      closing.closeAllConnections();
+    }
+
+    const forceTimeout = setTimeout(() => {
+      log.warn("Server close timed out, forcing destroy");
+      try { closing.close(); } catch {}
+      resolve();
+    }, 3000);
+
+    closing.close(() => {
+      clearTimeout(forceTimeout);
+      status = "stopped";
+      log.info("Stopped.");
+      resolve();
+    });
   });
 }
 
@@ -72,7 +89,7 @@ async function handleRequest(req, res, settings, providers) {
       sendJson(res, 404, { error: { message: "Not found", type: "invalid_request_error", code: "not_found" } });
     }
   } catch (error) {
-    console.error("[proxy] Request error:", error.message);
+    log.error("Request error: " + error.message);
     sendJson(res, 500, { error: { message: error.message || "Internal error", type: "server_error", code: "internal_error" } });
   }
 }
@@ -91,8 +108,8 @@ async function handleResponses(req, res, settings, providers) {
 }
 
 function handleModels(req, res, providers) {
-  const activeProvider = getActiveProvider(providers);
-  const models = activeProvider && activeProvider.model ? [activeProvider.model] : [];
+  const models = (providers || []).filter((p) => p.model).map((p) => p.model);
+  if (models.length === 0) models.push("gpt-4o");
   sendJson(res, 200, {
     object: "list",
     data: models.map((id) => ({ id, object: "model", created: 0, owned_by: "codex-switch" })),

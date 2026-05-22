@@ -2,9 +2,10 @@
 
 const { app, BrowserWindow, Menu, Tray, ipcMain, nativeImage, nativeTheme, shell } = require("electron");
 const path = require("node:path");
-const { loadSettings, saveSettings, loadProviders, saveProviders, getDataDir } = require("../shared/config");
+const { loadSettings, saveSettings, loadProviders, saveProviders } = require("../shared/config");
 const { createProxyServer, stopProxyServer, getStatus, getLastError } = require("../proxy/server");
 const { injectCodexConfig, removeCodexConfig } = require("../codex/catalog");
+const log = require("../shared/logger");
 
 const PRODUCT_NAME = "Codex-Switch";
 
@@ -19,6 +20,12 @@ if (!singleInstanceLock) {
   app.quit();
 } else {
   app.on("second-instance", () => showMainWindow());
+  log.onLog((level, message, meta) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("log-entry", { level, message, time: new Date().toISOString(), meta });
+    }
+  });
+
   app.whenReady().then(bootstrap);
 }
 
@@ -80,20 +87,25 @@ function registerIpcHandlers() {
     removeCodexConfig();
     return { ok: true, message: "Codex-Switch config section removed." };
   });
+  ipcMain.handle("open-external", (_, url) => {
+    if (typeof url === "string" && (url.startsWith("https://") || url.startsWith("http://"))) {
+      shell.openExternal(url);
+    }
+  });
 }
 
-function startProxy() {
-  stopProxyServer();
-  // Wait briefly for the previous server to close before creating a new one
-  setTimeout(() => {
-    createProxyServer(settings, providers);
-    // Auto-inject Codex config if there are providers
-    if (providers && providers.length > 0 && providers.some((p) => p.name && p.model)) {
-      injectCodexConfig(settings.port || 8629, providers);
-    }
-    notifyProxyStatus();
-    updateTrayMenu();
-  }, 100);
+async function startProxy() {
+  try {
+    await stopProxyServer();
+  } catch (err) {
+    console.error("[startProxy] Error stopping previous server:", err.message);
+  }
+  createProxyServer(settings, providers);
+  if (providers && providers.length > 0 && providers.some((p) => p.name && p.model)) {
+    injectCodexConfig(settings.port || 8629, providers);
+  }
+  notifyProxyStatus();
+  updateTrayMenu();
 }
 
 function notifyProxyStatus() {
@@ -175,10 +187,24 @@ function createTray() {
   tray.on("double-click", () => showMainWindow());
 }
 
+function trayLabel(key) {
+  const isZh = settings.language === "zh";
+  const map = {
+    showWindow: isZh ? "显示窗口" : "Show Window",
+    startProxy: isZh ? "启动代理" : "Start Proxy",
+    stopProxy: isZh ? "停止代理" : "Stop Proxy",
+    port: isZh ? "端口" : "Port",
+    providers: isZh ? "供应商" : "Providers",
+    quit: isZh ? "退出" : "Quit",
+    active: isZh ? " (当前)" : " (active)",
+  };
+  return map[key] || key;
+}
+
 function updateTrayMenu() {
   const proxyRunning = getStatus() === "running";
   const providerItems = providers.map((p, i) => ({
-    label: p.name + (p.active ? " (active)" : ""),
+    label: p.name + (p.active ? trayLabel("active") : ""),
     type: "radio",
     checked: Boolean(p.active),
     click: () => {
@@ -190,18 +216,18 @@ function updateTrayMenu() {
   }));
 
   const template = [
-    { label: "Show Window", click: () => showMainWindow() },
+    { label: trayLabel("showWindow"), click: () => showMainWindow() },
     { type: "separator" },
-    { label: proxyRunning ? "Stop Proxy" : "Start Proxy", click: () => {
+    { label: proxyRunning ? trayLabel("stopProxy") : trayLabel("startProxy"), click: () => {
       if (proxyRunning) { stopProxyServer(); notifyProxyStatus(); }
       else startProxy();
       updateTrayMenu();
     }},
-    { label: "Port: " + (settings.port || 8629), enabled: false },
+    { label: trayLabel("port") + ": " + (settings.port || 8629), enabled: false },
     { type: "separator" },
-    ...(providerItems.length > 0 ? [{ label: "Providers", submenu: providerItems }] : []),
+    ...(providerItems.length > 0 ? [{ label: trayLabel("providers"), submenu: providerItems }] : []),
     { type: "separator" },
-    { label: "Quit", click: () => quitApp() },
+    { label: trayLabel("quit"), click: () => quitApp() },
   ];
   const contextMenu = Menu.buildFromTemplate(template);
   tray.setContextMenu(contextMenu);

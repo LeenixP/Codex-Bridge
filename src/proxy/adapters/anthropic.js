@@ -1,6 +1,7 @@
 "use strict";
 
 const { request } = require("undici");
+const { parseSSEStream } = require("../../shared/stream");
 const {
   reasoningDeltaEvent,
   textDeltaEvent,
@@ -17,8 +18,33 @@ const EFFORT_TO_BUDGET = {
   high: 16000,
 };
 
-function buildUpstreamRequest(requestBody, provider, settings) {
-  const messages = convertInputToMessages(requestBody);
+/**
+ * Build an Anthropic Messages request from a Codex Responses API request body.
+ *
+ * Converts Responses-format input into Anthropic Messages, mapping:
+ *   instructions + system-role messages → top-level system field
+ *   reasoning.effort → thinking budget_tokens (low=2000, medium=8000, high=16000, xhigh/max=32000)
+ *   tools (function type) → Anthropic tool definitions with input_schema
+ *   function_call → assistant tool_use content block
+ *   function_call_output → user tool_result content block
+ *   input_image content parts → Anthropic image source (requires base64 data URI)
+ *
+ * @param {object} requestBody - Codex Responses API request body
+ * @param {string} requestBody.model - Model ID
+ * @param {string|Array} requestBody.input - User input (string or content array)
+ * @param {string} [requestBody.instructions] - System instructions
+ * @param {boolean} [requestBody.stream=true] - Whether to stream
+ * @param {number} [requestBody.max_output_tokens=8192] - Max tokens
+ * @param {number} [requestBody.temperature] - Sampling temperature
+ * @param {number} [requestBody.top_p] - Nucleus sampling parameter
+ * @param {object} [requestBody.reasoning] - Reasoning effort config
+ * @param {object[]} [requestBody.tools] - Tool definitions
+ * @param {object} provider - Provider configuration
+ * @param {string} provider.model - Default model override
+ * @returns {object} Anthropic Messages request payload
+ */
+function buildUpstreamRequest(requestBody, provider, _settings) {
+  const { messages, systemParts } = convertInputToMessages(requestBody);
   const payload = {
     model: provider.model || requestBody.model,
     messages,
@@ -26,9 +52,14 @@ function buildUpstreamRequest(requestBody, provider, settings) {
     max_tokens: requestBody.max_output_tokens || 8192,
   };
 
-  if (requestBody.instructions) {
-    payload.system = requestBody.instructions;
+  // Merge instructions with system-role messages from input
+  const systemTexts = [];
+  if (requestBody.instructions) systemTexts.push(requestBody.instructions);
+  if (systemParts.length > 0) systemTexts.push(systemParts.join("\n"));
+  if (systemTexts.length > 0) {
+    payload.system = systemTexts.join("\n\n");
   }
+
   if (requestBody.temperature !== undefined) {
     payload.temperature = requestBody.temperature;
   }
@@ -39,7 +70,7 @@ function buildUpstreamRequest(requestBody, provider, settings) {
   if (requestBody.reasoning && requestBody.reasoning.effort) {
     const effort = requestBody.reasoning.effort;
     if (effort === "xhigh" || effort === "max") {
-      payload.thinking = { type: "enabled", budget_tokens: Math.max(payload.max_tokens - 1, 10000) };
+      payload.thinking = { type: "enabled", budget_tokens: Math.min(payload.max_tokens - 1, 32000) };
     } else {
       const budget = EFFORT_TO_BUDGET[effort];
       if (budget) {
@@ -57,12 +88,13 @@ function buildUpstreamRequest(requestBody, provider, settings) {
 
 function convertInputToMessages(requestBody) {
   const messages = [];
+  const systemParts = [];
   const input = requestBody.input;
-  if (!input) return messages;
+  if (!input) return { messages, systemParts };
 
   if (typeof input === "string") {
     messages.push({ role: "user", content: input });
-    return messages;
+    return { messages, systemParts };
   }
 
   if (Array.isArray(input)) {
@@ -74,12 +106,22 @@ function convertInputToMessages(requestBody) {
       if (!item || typeof item !== "object") continue;
 
       if (item.role) {
-        messages.push(convertMessageItem(item));
+        const converted = convertMessageItem(item);
+        if (converted.role === "system") {
+          systemParts.push(typeof converted.content === "string" ? converted.content : "");
+        } else {
+          messages.push(converted);
+        }
         continue;
       }
 
       if (item.type === "message") {
-        messages.push(convertMessageItem(item));
+        const converted = convertMessageItem(item);
+        if (converted.role === "system") {
+          systemParts.push(typeof converted.content === "string" ? converted.content : "");
+        } else {
+          messages.push(converted);
+        }
       } else if (item.type === "function_call") {
         messages.push({
           role: "assistant",
@@ -103,11 +145,11 @@ function convertInputToMessages(requestBody) {
     }
   }
 
-  return messages;
+  return { messages, systemParts };
 }
 
 function convertMessageItem(item) {
-  const role = item.role === "assistant" ? "assistant" : "user";
+  const role = item.role === "assistant" ? "assistant" : (item.role === "system" ? "system" : "user");
   if (typeof item.content === "string") {
     return { role, content: item.content };
   }
@@ -117,6 +159,14 @@ function convertMessageItem(item) {
       if (!p) continue;
       if (p.type === "input_text" || p.type === "output_text" || p.type === "text") {
         parts.push({ type: "text", text: p.text || "" });
+      } else if (p.type === "input_image") {
+        const imageUrl = typeof p.image_url === "string" ? p.image_url : (p.image_url && p.image_url.url) || "";
+        if (imageUrl && imageUrl.startsWith("data:")) {
+          const match = imageUrl.match(/^data:([^;]+);base64,(.+)$/);
+          if (match) {
+            parts.push({ type: "image", source: { type: "base64", media_type: match[1], data: match[2] } });
+          }
+        }
       }
     }
     if (parts.length === 1 && parts[0].type === "text") {
@@ -143,6 +193,26 @@ function safeParseJson(value) {
   try { return JSON.parse(value); } catch { return {}; }
 }
 
+/**
+ * Stream an Anthropic Messages request and emit Responses API SSE events.
+ *
+ * Handles Anthropic SSE event sequence: message_start → content_block_start →
+ * content_block_delta (thinking/text/input_json/signature) → content_block_stop →
+ * message_delta → message_stop. Signature deltas are discarded.
+ *
+ * Thinking deltas map to reasoningDeltaEvent. Text deltas map to textDeltaEvent.
+ * Tool use blocks are tracked by index and emitted as toolCallStartEvent /
+ * toolCallArgsDeltaEvent / toolCallEndEvent.
+ *
+ * If the stream exits without message_stop, emits a stream_interrupted error.
+ *
+ * @param {object} upstreamPayload - Payload from buildUpstreamRequest
+ * @param {object} provider - Provider configuration
+ * @param {string} provider.baseUrl - API base URL
+ * @param {string} provider.apiKey - API key
+ * @param {function} emit - Callback receiving event objects (from events.js factory functions)
+ * @returns {Promise<void>}
+ */
 async function streamUpstream(upstreamPayload, provider, emit) {
   const baseUrl = (provider.baseUrl || "https://api.anthropic.com").replace(/\/+$/, "");
   const url = baseUrl + "/v1/messages";
@@ -185,12 +255,13 @@ async function streamUpstream(upstreamPayload, provider, emit) {
 
   let usage = null;
   const toolCalls = {};
-  let currentBlockType = null;
+  let _currentBlockType = null;
   let currentBlockIndex = -1;
+  let streamEndedCleanly = false;
 
   for await (const chunk of parseSSEStream(res.body)) {
     let data;
-    try { data = JSON.parse(chunk); } catch { continue; }
+    try { data = JSON.parse(chunk); } catch { console.warn("[anthropic] unparseable SSE chunk"); continue; }
 
     const eventType = data.type;
 
@@ -216,7 +287,7 @@ async function streamUpstream(upstreamPayload, provider, emit) {
       currentBlockIndex = data.index !== undefined ? data.index : currentBlockIndex + 1;
       const block = data.content_block;
       if (!block) continue;
-      currentBlockType = block.type;
+      _currentBlockType = block.type;
       if (block.type === "tool_use") {
         const callId = block.id || "call_" + currentBlockIndex;
         toolCalls[currentBlockIndex] = { id: callId, name: block.name || "", args: "" };
@@ -250,18 +321,37 @@ async function streamUpstream(upstreamPayload, provider, emit) {
       if (tc && tc.name) {
         emit(toolCallEndEvent(tc.id, tc.name, tc.args));
       }
-      currentBlockType = null;
+      _currentBlockType = null;
       continue;
     }
 
     if (eventType === "message_stop") {
+      streamEndedCleanly = true;
       break;
     }
+  }
+
+  if (!streamEndedCleanly) {
+    emit(errorEvent("Upstream stream ended unexpectedly", "stream_interrupted"));
+    return;
   }
 
   emit(responseCompletedEvent(usage));
 }
 
+/**
+ * Make a non-streaming Anthropic Messages request.
+ *
+ * Returns a structured result with text, reasoning, toolCalls, and usage fields.
+ * Text and thinking content blocks are concatenated. Tool use blocks become
+ * toolCalls entries with JSON-stringified arguments.
+ *
+ * On error, throws an Error with a `statusCode` property set to the HTTP status.
+ *
+ * @param {object} upstreamPayload - Payload from buildUpstreamRequest
+ * @param {object} provider - Provider configuration
+ * @returns {Promise<{text: string, reasoning: string, toolCalls: Array, usage: object|null}>}
+ */
 async function callUpstream(upstreamPayload, provider) {
   const payload = Object.assign({}, upstreamPayload, { stream: false });
   const baseUrl = (provider.baseUrl || "https://api.anthropic.com").replace(/\/+$/, "");
@@ -285,7 +375,9 @@ async function callUpstream(upstreamPayload, provider) {
   if (res.statusCode !== 200) {
     let msg = "Upstream returned HTTP " + res.statusCode;
     try { msg = JSON.parse(responseBody).error.message || msg; } catch {}
-    throw new Error(msg);
+    const err = new Error(msg);
+    err.statusCode = res.statusCode;
+    throw err;
   }
 
   const data = JSON.parse(responseBody);
@@ -318,28 +410,6 @@ async function callUpstream(upstreamPayload, provider) {
   return result;
 }
 
-async function* parseSSEStream(body) {
-  let buffer = "";
-  for await (const chunk of body) {
-    buffer += typeof chunk === "string" ? chunk : chunk.toString("utf8");
-    const lines = buffer.split("\n");
-    buffer = lines.pop() || "";
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith(":")) continue;
-      if (trimmed.startsWith("data: ")) {
-        const payload = trimmed.slice(6).trim();
-        if (payload) yield payload;
-      }
-    }
-  }
-  if (buffer.trim()) {
-    const trimmed = buffer.trim();
-    if (trimmed.startsWith("data: ")) {
-      yield trimmed.slice(6).trim();
-    }
-  }
-}
 
 module.exports = {
   buildUpstreamRequest,

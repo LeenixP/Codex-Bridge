@@ -2,7 +2,7 @@
 
 const { makeId } = require("../../shared/http");
 const { createSseBridge } = require("./sse-bridge");
-const { responseCompletedEvent, errorEvent } = require("./events");
+const { errorEvent } = require("./events");
 
 async function orchestrate(req, res, requestBody, provider, settings) {
   const responseId = makeId("resp");
@@ -34,7 +34,7 @@ async function orchestrate(req, res, requestBody, provider, settings) {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify(response));
     } catch (err) {
-      res.writeHead(502, { "Content-Type": "application/json" });
+      res.writeHead(err.statusCode || 502, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: { message: err.message || "Upstream request failed", type: "api_error", code: "upstream_error" } }));
     }
   }

@@ -43,6 +43,7 @@ function createSseBridge(res, responseId, model) {
   });
 
   function handleEvent(event) {
+    if (res.writableEnded) return;
     switch (event.type) {
       case EventType.REASONING_DELTA:
         handleReasoningDelta(event.delta);
