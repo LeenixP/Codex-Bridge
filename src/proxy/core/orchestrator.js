@@ -21,7 +21,11 @@ async function orchestrate(req, res, requestBody, provider, settings) {
     return;
   }
 
+  log.debug("Input items: " + (requestBody.input ? requestBody.input.length : 0) + " | tools: " + (requestBody.tools ? requestBody.tools.length : 0), { provider: provider.name, requestId: responseId });
+
   const upstreamRequest = adapter.buildUpstreamRequest(requestBody, provider, settings);
+
+  log.debug("Upstream messages: " + (upstreamRequest.messages ? upstreamRequest.messages.length : 0) + " | model=" + upstreamRequest.model + " | stream=" + upstreamRequest.stream, { provider: provider.name, requestId: responseId });
 
   // Run vendor preset hooks (e.g. DeepSeek reasoning_content passthrough)
   const hooks = getHooks(provider);

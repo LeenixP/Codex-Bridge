@@ -4,14 +4,20 @@
 // Each flag is a boolean that adapters may check at runtime.
 //   reasoningPassthrough   multi-turn requires reasoning_content echoed back
 
+// --- Hook modules ------------------------------------------------------------
+// Each vendor preset with custom behavior loads its hooks from a dedicated file
+// under hooks/<vendor>.js.  This keeps presets/index.js lean.
+
+const deepseekHooks = require("./hooks/deepseek");
+
 // --- Preset registry ---------------------------------------------------------
 // Keys match provider.preset.  Protocol templates have an empty baseUrl so
 // the user fills in their own endpoint.  Vendor presets pre-fill everything
 // and may include hooks for vendor-specific request transforms.
 //
 // Adding a new vendor:
-//   1. Add an entry below.
-//   2. If the vendor needs special behaviour, add the feature flag or a hook.
+//   1. Create hooks/<vendor>.js exporting the hook functions.
+//   2. Add an entry below referencing those hooks.
 //   3. Done — no changes needed in the generic adapters.
 
 const presets = {
@@ -47,26 +53,7 @@ const presets = {
     features: {
       reasoningPassthrough: true,
     },
-    hooks: {
-      // DeepSeek requires reasoning_content echoed on the assistant message
-      // during multi-turn conversations.
-      onMessagesBuilt: function (messages, requestBody, _provider) {
-        const reasoningText = extractReasoningFromBody(requestBody);
-        if (!reasoningText) return messages;
-
-        // Attach reasoning_content to the LAST assistant message found.
-        // DeepSeek tolerates it on any assistant message; we attach to the
-        // most recent one matching the reasoning intent.
-        for (let i = messages.length - 1; i >= 0; i--) {
-          if (messages[i].role === "assistant") {
-            messages[i].reasoning_content =
-              (messages[i].reasoning_content || "") + reasoningText;
-            break;
-          }
-        }
-        return messages;
-      },
-    },
+    hooks: deepseekHooks,
   },
 };
 
@@ -131,27 +118,6 @@ function getQuickPresets() {
       models: p.models || [],
     };
   });
-}
-
-// ---- Internal helpers -------------------------------------------------------
-
-function extractReasoningFromBody(requestBody) {
-  const input = requestBody && requestBody.input;
-  if (!Array.isArray(input)) return "";
-
-  let text = "";
-  for (let i = 0; i < input.length; i++) {
-    const item = input[i];
-    if (!item || typeof item !== "object") continue;
-    if (item.type === "reasoning") {
-      if (item.summary && Array.isArray(item.summary)) {
-        for (let j = 0; j < item.summary.length; j++) {
-          text += item.summary[j].text || "";
-        }
-      }
-    }
-  }
-  return text;
 }
 
 module.exports = {

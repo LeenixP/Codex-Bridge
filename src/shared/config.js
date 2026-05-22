@@ -87,6 +87,7 @@ function loadSettings() {
     theme: "dark",
     language: "zh",
     closeBehavior: "tray",
+    logLevel: "info",
   };
   const saved = readJsonFile(settingsPath, {});
   return Object.assign({}, defaults, saved);

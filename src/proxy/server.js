@@ -79,6 +79,8 @@ async function handleRequest(req, res, settings, providers) {
     return;
   }
 
+  log.debug(req.method + " " + pathname);
+
   try {
     if (pathname === "/v1/responses" && req.method === "POST") {
       await handleResponses(req, res, settings, providers);

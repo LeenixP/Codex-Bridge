@@ -20,6 +20,7 @@
 
   let PRESETS = [];
   let selectedPreset = null; // preset id chosen in the dialog
+  let _proxyStatus = "stopped"; // source of truth, avoids DOM class race
 
   (async function loadPresets() {
     if (api && api.getPresets) {
@@ -66,12 +67,7 @@
       starting: t("proxyStarting"),
       error: t("proxyError"),
     };
-    const status = el.classList.contains("running") ? "running"
-      : el.classList.contains("starting") ? "starting"
-      : el.classList.contains("stopped") ? "stopped"
-      : el.classList.contains("error") ? "error"
-      : "stopped";
-    text.textContent = labels[status] || status;
+    text.textContent = labels[_proxyStatus] || _proxyStatus;
   }
 
   // Navigation
@@ -85,6 +81,7 @@
       item.classList.add("active");
       item.setAttribute("aria-current", "page");
       document.getElementById("page-" + target).classList.add("active");
+      if (target === "logs") renderLogs();
     });
   });
 
@@ -122,6 +119,7 @@
 
   // Proxy status
   async function updateProxyStatus(status) {
+    _proxyStatus = status;
     const el = document.getElementById("proxy-status");
     if (!el) return;
     el.className = "proxy-status " + status;
@@ -144,6 +142,7 @@
 
     setRadio("theme", settings.theme || "dark");
     setRadio("language", settings.language || "zh");
+    setRadio("loglevel", settings.logLevel || "info");
     setRadio("close", settings.closeBehavior || "tray");
 
     applyTheme(settings.theme || "dark");
@@ -184,12 +183,20 @@
     if (api) await api.saveSettings(settings);
     applyTranslations();
   }));
+  document.querySelectorAll('input[name="loglevel"]').forEach((r) => r.addEventListener("change", async () => {
+    settings.logLevel = getRadio("loglevel");
+    if (api) {
+      await api.saveSettings(settings);
+      await api.setLogLevel(settings.logLevel);
+    }
+  }));
 
   async function saveCurrentSettings() {
     try {
       settings.port = Number(document.getElementById("setting-port").value) || 8629;
       settings.theme = getRadio("theme");
       settings.language = getRadio("language");
+      settings.logLevel = getRadio("loglevel");
       settings.closeBehavior = getRadio("close");
       if (api) await api.saveSettings(settings);
     } catch (err) {
@@ -215,9 +222,8 @@
     const btn = document.getElementById("btn-toggle-proxy");
     if (!btn) return;
     const label = btn.querySelector(".btn-label");
-    const statusEl = document.getElementById("proxy-status");
-    const isRunning = statusEl && statusEl.classList.contains("running");
-    const isLoading = statusEl && statusEl.classList.contains("starting");
+    const isRunning = _proxyStatus === "running";
+    const isLoading = _proxyStatus === "starting";
 
     btn.className = "sidebar-proxy-btn";
     if (isLoading) {
@@ -238,10 +244,9 @@
   document.getElementById("btn-toggle-proxy").addEventListener("click", async () => {
     if (!api) return;
     const btn = document.getElementById("btn-toggle-proxy");
-    const statusEl = document.getElementById("proxy-status");
-    if (!btn || !statusEl) return;
+    if (!btn) return;
 
-    const isRunning = statusEl.classList.contains("running");
+    const isRunning = _proxyStatus === "running";
     if (btn.classList.contains("loading")) return;
 
     // Loading state
@@ -280,10 +285,11 @@
     const activeClass = provider.active ? " active" : "";
     const protocolLabel = provider.protocol === "anthropic" ? t("protocolAnthropic") : t("protocolOpenAI");
     const statusLabel = provider.active ? '<span class="status-badge active">' + t("active") + '</span>' : "";
+    const presetLabel = provider.preset ? '<span class="preset-tag">' + t("presetTag") + '</span>' : "";
     return '<div class="provider-card' + activeClass + '" data-index="' + index + '">' +
       '<div class="provider-icon">' + protocolIcon(provider.protocol) + '</div>' +
       '<div class="provider-info">' +
-      '<div class="provider-name">' + escapeHtml(provider.name) + ' ' + statusLabel + '</div>' +
+      '<div class="provider-name">' + escapeHtml(provider.name) + ' ' + statusLabel + ' ' + presetLabel + '</div>' +
       '<div class="provider-detail"><span class="protocol-badge">' + protocolLabel + '</span> ' + escapeHtml(provider.model || "") + '</div>' +
       '<div class="provider-url">' + escapeHtml(provider.baseUrl || "") + '</div>' +
       '<div class="feature-toggles">' +
@@ -443,6 +449,8 @@
     dialog.querySelector("#dlg-save").addEventListener("click", saveDialog);
     dialog.querySelectorAll(".btn-preset").forEach((btn) => {
       btn.addEventListener("click", () => {
+        dialog.querySelectorAll(".btn-preset").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
         const preset = PRESETS[Number(btn.dataset.preset)];
         selectedPreset = preset.id || null;
         document.getElementById("dlg-name").value = preset.name || "";
@@ -452,6 +460,17 @@
         document.getElementById("dlg-apikey").value = "";
       });
     });
+
+    // Highlight the active preset button when editing
+    if (selectedPreset) {
+      const presetBtns = dialog.querySelectorAll(".btn-preset");
+      presetBtns.forEach((btn) => {
+        const preset = PRESETS[Number(btn.dataset.preset)];
+        if (preset && preset.id === selectedPreset) {
+          btn.classList.add("active");
+        }
+      });
+    }
 
     // Auto-switch baseUrl when protocol changes (vendor variant support)
     const protoSelect = dialog.querySelector("#dlg-protocol");
@@ -544,6 +563,8 @@
 
   // Logs
   const logEntries = [];
+  const MAX_VISIBLE = 50; // collapse older entries
+
   document.getElementById("btn-clear-logs").addEventListener("click", () => {
     logEntries.length = 0;
     renderLogs();
@@ -555,9 +576,43 @@
       list.innerHTML = '<div class="empty-state"><p>' + t("noLogs") + '</p></div>';
       return;
     }
-    list.innerHTML = logEntries.map((e) =>
-      '<div class="log-entry"><span class="log-time">' + e.time + '</span><span class="log-level ' + e.level + '">' + e.level + '</span><span class="log-message">' + escapeHtml(e.message) + '</span></div>'
-    ).join("");
+
+    // Newest first
+    const visible = logEntries.length > MAX_VISIBLE ? logEntries.slice(-MAX_VISIBLE) : logEntries;
+    const olderCount = logEntries.length - visible.length;
+
+    let html = "";
+    if (olderCount > 0) {
+      html += '<div class="log-fold" id="log-fold-older"><span>' + t("logOlderEntries", { count: olderCount }) + ' <a href="#" id="btn-show-older">' + t("logShowAll") + '</a></span></div>';
+    }
+
+    // Render in reverse (newest first), newest at top
+    for (let i = visible.length - 1; i >= 0; i--) {
+      const e = visible[i];
+      html += '<div class="log-entry"><span class="log-time">' + e.time + '</span><span class="log-level ' + e.level + '">' + e.level + '</span><span class="log-message">' + escapeHtml(e.message) + '</span></div>';
+    }
+
+    list.innerHTML = html;
+
+    // Bind "show all" click
+    const showAllBtn = document.getElementById("btn-show-older");
+    if (showAllBtn) {
+      showAllBtn.addEventListener("click", function (ev) {
+        ev.preventDefault();
+        renderAllLogs();
+      });
+    }
+  }
+
+  function renderAllLogs() {
+    const list = document.getElementById("log-list");
+    let html = "";
+    // Reverse: newest first
+    for (let i = logEntries.length - 1; i >= 0; i--) {
+      const e = logEntries[i];
+      html += '<div class="log-entry"><span class="log-time">' + e.time + '</span><span class="log-level ' + e.level + '">' + e.level + '</span><span class="log-message">' + escapeHtml(e.message) + '</span></div>';
+    }
+    list.innerHTML = html;
   }
 
   // Utilities

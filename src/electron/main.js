@@ -33,6 +33,7 @@ if (!singleInstanceLock) {
 async function bootstrap() {
   settings = loadSettings();
   providers = loadProviders();
+  log.setLevel(settings.logLevel || "info");
 
   // Apply dark title bar on Linux
   nativeTheme.themeSource = settings.theme === "dark" ? "dark" : (settings.theme === "light" ? "light" : "system");
@@ -93,6 +94,10 @@ function registerIpcHandlers() {
   ipcMain.handle("get-presets", () => getQuickPresets());
   ipcMain.handle("get-variant-baseurl", (_, provider, protocol) => {
     return getVariantBaseUrl(provider, protocol);
+  });
+  ipcMain.handle("set-log-level", (_, level) => {
+    log.setLevel(level);
+    log.info("Log level changed to " + level);
   });
   ipcMain.handle("get-app-version", () => {
     return app.getVersion();

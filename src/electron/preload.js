@@ -26,5 +26,6 @@ contextBridge.exposeInMainWorld("codexSwitch", {
   onLogEntry: (callback) => {
     ipcRenderer.on("log-entry", (_, entry) => callback(entry));
   },
+  setLogLevel: (level) => ipcRenderer.invoke("set-log-level", level),
   platform: process.platform,
 });

@@ -5,7 +5,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const ROOT = path.join(__dirname, "..", "src");
-const EXCLUDE = new Set(["ui"]);
+const EXCLUDE = new Set([]);
 
 const results = { ok: 0, fail: 0 };
 
