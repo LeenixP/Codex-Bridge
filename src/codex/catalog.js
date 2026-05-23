@@ -1,4 +1,4 @@
-"use strict";
+﻿"use strict";
 
 const { execFileSync } = require("node:child_process");
 const fs = require("node:fs");
@@ -9,7 +9,7 @@ const CODEX_CONFIG_DIR = path.join(os.homedir(), ".codex");
 const CODEX_CONFIG_FILE = path.join(CODEX_CONFIG_DIR, "config.toml");
 const CODEX_AUTH_FILE = path.join(CODEX_CONFIG_DIR, "auth.json");
 const CODEX_PROXY_AUTH_KEY = "codex-switch-local";
-const CATALOG_TIMEOUT_MS = 8000;
+const CATALOG_TIMEOUT_MS = parseInt(process.env.CODEX_CATALOG_TIMEOUT_MS || "15000", 10);
 const BASE_MODELS = ["gpt-5.5", "gpt-5.4", "gpt-5.2"];
 
 function getCodexConfigDir() {
@@ -40,22 +40,41 @@ function findCodexCommand() {
   return "codex";
 }
 
-function readNativeCatalog() {
+function readNativeCatalog(retries = 2) {
   const command = findCodexCommand();
   const args = ["debug", "models", "--bundled"];
   const invocation = process.platform === "win32" && /\.(?:cmd|bat)$/i.test(command)
     ? { cmd: process.env.ComSpec || "cmd.exe", args: ["/d", "/c", "call", command, ...args] }
     : { cmd: command, args };
 
-  const output = execFileSync(invocation.cmd, invocation.args, {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-    windowsHide: true,
-    maxBuffer: 16 * 1024 * 1024,
-    timeout: CATALOG_TIMEOUT_MS,
-  });
-
-  return JSON.parse(output.replace(/^﻿/, ""));
+  let lastError = null;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const output = execFileSync(invocation.cmd, invocation.args, {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+        windowsHide: true,
+        maxBuffer: 16 * 1024 * 1024,
+        timeout: CATALOG_TIMEOUT_MS,
+      });
+      return JSON.parse(output.replace(/^\uFEFF/, ""));
+    } catch (err) {
+      lastError = err;
+      if (err.killed || err.code === "ETIMEDOUT") {
+        if (attempt < retries) {
+          const delay = Math.min(1000 * Math.pow(2, attempt), 4000);
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delay);
+        }
+      } else {
+        break;
+      }
+    }
+  }
+  const code = lastError && lastError.code || "UNKNOWN";
+  const msg = lastError && lastError.killed
+    ? "Codex CLI timed out after " + CATALOG_TIMEOUT_MS + "ms (" + (retries + 1) + " attempt(s)). Try setting CODEX_CATALOG_TIMEOUT_MS env var."
+    : "Failed to run codex CLI (exit code: " + code + "): " + (lastError && lastError.message || "");
+  throw new Error(msg);
 }
 
 function findBaseModel(catalog) {
@@ -160,7 +179,36 @@ function injectCodexConfig(proxyPort, providers) {
     .replace(/^model_provider\s*=\s*.*$/m, 'model_provider = "' + providerId + '"')
     .replace(/^model\s*=\s*.*$/m, 'model = "' + modelName + '"');
 
-  // Build managed section — only provider definition + aliases (no top-level dupes)
+  // Detect and comment out preferred_auth_method = "apikey" — it conflicts
+  // with the hybrid OAuth + proxy mode and causes Codex to hang on startup.
+  const authMethodFixed = /^preferred_auth_method\s*=\s*"apikey"/m.test(existing);
+  if (authMethodFixed) {
+    existing = existing.replace(
+      /^preferred_auth_method\s*=\s*"apikey"/m,
+      "# preferred_auth_method = \"apikey\"  # Codex-Switch: commented out — incompatible with hybrid OAuth mode"
+    );
+  }
+
+  // Collect all known Codex model slugs so we can alias them to the
+  // active provider model.  This prevents Codex background tasks
+  // (title generation, etc.) from sending native model names like
+  // gpt-5.4-mini directly to the upstream provider.
+  let nativeModelSlugs = [];
+  try {
+    const nativeCatalog = readNativeCatalog();
+    if (nativeCatalog && Array.isArray(nativeCatalog.models)) {
+      nativeModelSlugs = nativeCatalog.models.map(function (m) { return m.slug; });
+    }
+  } catch {}
+
+  // Add our own codex-switch prefixed models
+  const allAliasSlugs = [modelName].concat(nativeModelSlugs.filter(function (s) { return s !== modelName; }));
+
+  const aliasLines = allAliasSlugs.map(function (slug) {
+    return '"' + slug + '" = "' + (activeProvider.model || modelName) + '"';
+  });
+
+  // Build managed section 鈥?only provider definition + aliases (no top-level dupes)
   const section = [
     marker,
     "# Codex-Switch proxy configuration",
@@ -171,20 +219,44 @@ function injectCodexConfig(proxyPort, providers) {
     'name = "' + activeProvider.name + ' (Codex-Switch)"',
     'wire_api = "responses"',
     "requires_openai_auth = true",
+    'api_key = "' + CODEX_PROXY_AUTH_KEY + '"',
     'base_url = "http://127.0.0.1:' + proxyPort + '/v1"',
     "",
     "[model_providers." + providerId + ".model_aliases]",
-    '"' + modelName + '" = "' + (activeProvider.model || modelName) + '"',
+  ].concat(aliasLines).concat([
     endMarker,
     "",
-  ].join("\n");
+  ]).join("\n");
 
   fs.writeFileSync(CODEX_CONFIG_FILE, existing.trimEnd() + "\n\n" + section, "utf8");
 
-  writeCodexAuth();
+  // Clean up dummy key left by older Codex-Switch versions.
+  // Only removes the OPENAI_API_KEY field — preserves OAuth tokens.
+  try {
+    if (fs.existsSync(CODEX_AUTH_FILE)) {
+      const auth = JSON.parse(fs.readFileSync(CODEX_AUTH_FILE, "utf8"));
+      if (auth.OPENAI_API_KEY === CODEX_PROXY_AUTH_KEY) {
+        delete auth.OPENAI_API_KEY;
+        if (Object.keys(auth).length === 0) {
+          fs.unlinkSync(CODEX_AUTH_FILE);
+        } else {
+          fs.writeFileSync(CODEX_AUTH_FILE, JSON.stringify(auth, null, 2), "utf8");
+        }
+      }
+    }
+  } catch {}
+
+  // Note: auth.json is intentionally left untouched beyond the cleanup above.
+  // With requires_openai_auth = true, Codex uses the ChatGPT OAuth session
+  // for auth-layer features (plugins, Mobile, quotas), while model requests
+  // route through the local proxy.  The api_key in the provider config is
+  // the Bearer token Codex sends; the proxy ignores it and uses its own keys.
 
   result.ok = true;
   result.message = "Codex config updated: model=" + activeProvider.name + ", port=" + proxyPort;
+  if (authMethodFixed) {
+    result.message += " | Fixed: commented out preferred_auth_method=apikey (incompatible with hybrid OAuth mode)";
+  }
   return result;
 }
 
@@ -215,11 +287,18 @@ function removeCodexConfig() {
     }
   } catch {}
 
-  // Remove auth.json if it only contains the local proxy key
+  // Clean up dummy key that may have been written by an older version.
+  // Only remove the OPENAI_API_KEY field — never delete the file,
+  // as it may contain valid ChatGPT OAuth tokens.
   try {
     const auth = JSON.parse(fs.readFileSync(CODEX_AUTH_FILE, "utf8"));
     if (auth.OPENAI_API_KEY === CODEX_PROXY_AUTH_KEY) {
-      fs.unlinkSync(CODEX_AUTH_FILE);
+      delete auth.OPENAI_API_KEY;
+      if (Object.keys(auth).length === 0) {
+        fs.unlinkSync(CODEX_AUTH_FILE);
+      } else {
+        fs.writeFileSync(CODEX_AUTH_FILE, JSON.stringify(auth, null, 2), "utf8");
+      }
     }
   } catch {}
 }

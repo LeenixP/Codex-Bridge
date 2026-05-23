@@ -148,7 +148,8 @@ async function startProxy() {
   }
   await createProxyServer(settings, providers);
   if (providers && providers.length > 0 && providers.some((p) => p.name && p.model)) {
-    injectCodexConfig(settings.port || 8629, providers);
+    const result = injectCodexConfig(settings.port || 8629, providers);
+    log.info(result.message);
   }
   notifyProxyStatus();
   updateTrayMenu();

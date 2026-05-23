@@ -2,6 +2,7 @@
 
 const { request } = require("undici");
 const { parseSSEStream } = require("../../shared/stream");
+const reasoningCache = require("../core/reasoning-cache");
 const {
   reasoningDeltaEvent,
   textDeltaEvent,
@@ -22,12 +23,12 @@ const EFFORT_TO_BUDGET = {
  * Build an Anthropic Messages request from a Codex Responses API request body.
  *
  * Converts Responses-format input into Anthropic Messages, mapping:
- *   instructions + system-role messages → top-level system field
- *   reasoning.effort → thinking budget_tokens (low=2000, medium=8000, high=16000, xhigh/max=32000)
- *   tools (function type) → Anthropic tool definitions with input_schema
- *   function_call → assistant tool_use content block
- *   function_call_output → user tool_result content block
- *   input_image content parts → Anthropic image source (requires base64 data URI)
+ *   instructions + system-role messages �?top-level system field
+ *   reasoning.effort �?thinking budget_tokens (low=2000, medium=8000, high=16000, xhigh/max=32000)
+ *   tools (function type) �?Anthropic tool definitions with input_schema
+ *   function_call �?assistant tool_use content block
+ *   function_call_output �?user tool_result content block
+ *   input_image content parts �?Anthropic image source (requires base64 data URI)
  *
  * @param {object} requestBody - Codex Responses API request body
  * @param {string} requestBody.model - Model ID
@@ -50,6 +51,7 @@ function buildUpstreamRequest(requestBody, provider, _settings) {
     messages,
     stream: requestBody.stream !== false,
     max_tokens: requestBody.max_output_tokens || 8192,
+    _betas: [],
   };
 
   // Merge instructions with system-role messages from input
@@ -71,10 +73,12 @@ function buildUpstreamRequest(requestBody, provider, _settings) {
     const effort = requestBody.reasoning.effort;
     if (effort === "xhigh" || effort === "max") {
       payload.thinking = { type: "enabled", budget_tokens: Math.min(payload.max_tokens - 1, 32000) };
+      payload._betas.push("thinking-2025");
     } else {
       const budget = EFFORT_TO_BUDGET[effort];
       if (budget) {
         payload.thinking = { type: "enabled", budget_tokens: budget };
+        payload._betas.push("thinking-2025");
       }
     }
   }
@@ -217,9 +221,9 @@ function safeParseJson(value) {
 /**
  * Stream an Anthropic Messages request and emit Responses API SSE events.
  *
- * Handles Anthropic SSE event sequence: message_start → content_block_start →
- * content_block_delta (thinking/text/input_json/signature) → content_block_stop →
- * message_delta → message_stop. Signature deltas are discarded.
+ * Handles Anthropic SSE event sequence: message_start �?content_block_start �?
+ * content_block_delta (thinking/text/input_json/signature) �?content_block_stop �?
+ * message_delta �?message_stop. Signature deltas are discarded.
  *
  * Thinking deltas map to reasoningDeltaEvent. Text deltas map to textDeltaEvent.
  * Tool use blocks are tracked by index and emitted as toolCallStartEvent /
@@ -241,6 +245,9 @@ async function streamUpstream(upstreamPayload, provider, emit) {
   const headers = {
     "Content-Type": "application/json",
     "x-api-key": provider.apiKey || "",
+    ...(upstreamPayload._betas && upstreamPayload._betas.length > 0
+      ? { "anthropic-beta": upstreamPayload._betas.join(",") }
+      : {}),
     "anthropic-version": "2023-06-01",
   };
 
@@ -266,8 +273,9 @@ async function streamUpstream(upstreamPayload, provider, emit) {
       msg = (parsed.error && parsed.error.message) || msg;
     } catch {}
 
+    dumpRequestThinking(upstreamPayload, provider);
     if (res.statusCode === 400 && msg.includes("signature")) {
-      emit(errorEvent("Anthropic signature error — retrying without signatures is not yet supported. " + msg, "signature_error"));
+      emit(errorEvent("Anthropic signature error - retrying without signatures is not yet supported. " + msg, "signature_error"));
     } else {
       emit(errorEvent(msg, "upstream_" + res.statusCode));
     }
@@ -279,6 +287,8 @@ async function streamUpstream(upstreamPayload, provider, emit) {
   let _currentBlockType = null;
   let currentBlockIndex = -1;
   let streamEndedCleanly = false;
+  let thinkingText = "";
+  let thinkingSignature = "";
 
   for await (const chunk of parseSSEStream(res.body)) {
     let data;
@@ -313,6 +323,9 @@ async function streamUpstream(upstreamPayload, provider, emit) {
         const callId = block.id || "call_" + currentBlockIndex;
         toolCalls[currentBlockIndex] = { id: callId, name: block.name || "", args: "" };
         emit(toolCallStartEvent(callId, block.name || ""));
+      } else if (block.type === "thinking") {
+        thinkingText = "";
+        thinkingSignature = "";
       }
       continue;
     }
@@ -322,6 +335,7 @@ async function streamUpstream(upstreamPayload, provider, emit) {
       if (!delta) continue;
 
       if (delta.type === "thinking_delta") {
+        thinkingText += delta.thinking || "";
         emit(reasoningDeltaEvent(delta.thinking || ""));
       } else if (delta.type === "text_delta") {
         emit(textDeltaEvent(delta.text || ""));
@@ -332,12 +346,15 @@ async function streamUpstream(upstreamPayload, provider, emit) {
           emit(toolCallArgsDeltaEvent(tc.id, delta.partial_json || ""));
         }
       } else if (delta.type === "signature_delta") {
-        // Discard signature deltas
+        thinkingSignature += delta.signature || "";
       }
       continue;
     }
 
     if (eventType === "content_block_stop") {
+      if (_currentBlockType === "thinking" && thinkingText && thinkingSignature) {
+        reasoningCache.store(thinkingText, thinkingSignature);
+      }
       const tc = toolCalls[currentBlockIndex];
       if (tc && tc.name) {
         emit(toolCallEndEvent(tc.id, tc.name, tc.args));
@@ -375,13 +392,20 @@ async function streamUpstream(upstreamPayload, provider, emit) {
  */
 async function callUpstream(upstreamPayload, provider) {
   const payload = Object.assign({}, upstreamPayload, { stream: false });
+  delete payload._betas;
   const baseUrl = (provider.baseUrl || "https://api.anthropic.com").replace(/\/+$/, "");
   const url = baseUrl + "/v1/messages";
 
   const headers = {
     "Content-Type": "application/json",
     "x-api-key": provider.apiKey || "",
+    ...(upstreamPayload._betas && upstreamPayload._betas.length > 0
+      ? { "anthropic-beta": upstreamPayload._betas.join(",") }
+      : {}),
     "anthropic-version": "2023-06-01",
+    ...(upstreamPayload._betas && upstreamPayload._betas.length > 0
+      ? { "anthropic-beta": upstreamPayload._betas.join(",") }
+      : {}),
   };
 
   const res = await request(url, {
@@ -396,6 +420,7 @@ async function callUpstream(upstreamPayload, provider) {
   if (res.statusCode !== 200) {
     let msg = "Upstream returned HTTP " + res.statusCode;
     try { msg = JSON.parse(responseBody).error.message || msg; } catch {}
+    dumpRequestThinking(payload, provider);
     const err = new Error(msg);
     err.statusCode = res.statusCode;
     throw err;
@@ -416,6 +441,9 @@ async function callUpstream(upstreamPayload, provider) {
     for (const block of data.content) {
       if (block.type === "thinking") {
         result.reasoning += block.thinking || "";
+        if (block.thinking && block.signature) {
+          reasoningCache.store(block.thinking, block.signature);
+        }
       } else if (block.type === "text") {
         result.text += block.text || "";
       } else if (block.type === "tool_use") {
@@ -431,6 +459,38 @@ async function callUpstream(upstreamPayload, provider) {
   return result;
 }
 
+
+function dumpRequestThinking(payload, provider) {
+  if (!payload || !Array.isArray(payload.messages)) return;
+  const lines = [];
+  for (let m = 0; m < payload.messages.length; m++) {
+    const msg = payload.messages[m];
+    if (msg.role !== "assistant") continue;
+    const content = msg.content;
+    if (typeof content === "string") {
+      lines.push("  msg[" + m + "] assistant text(" + content.length + ") no_thinking");
+      continue;
+    }
+    if (!Array.isArray(content)) {
+      lines.push("  msg[" + m + "] assistant <no content>");
+      continue;
+    }
+    const hasThinking = content.some(function (b) { return b.type === "thinking"; });
+    const blocks = content.map(function (b) {
+      if (b.type === "thinking") {
+        var txt = (b.thinking || "");
+        var prefix = txt.length > 50 ? txt.slice(0, 50) + "..." : txt;
+        return "thinking(len=" + txt.length + ",sig=" + (b.signature ? "yes" : "NO") + ") " + prefix;
+      }
+      if (b.type === "text") return "text(" + (b.text ? b.text.length : 0) + ")";
+      if (b.type === "tool_use") return "tool_use(" + (b.name || "?") + ")";
+      if (b.type === "tool_result") return "tool_result";
+      return b.type || "?";
+    });
+    lines.push("  msg[" + m + "] assistant" + (hasThinking ? "" : " NO_THINKING") + ": [" + blocks.join(", ") + "]");
+  }
+  console.warn("[anthropic] ERROR request thinking dump (" + payload.messages.length + " msgs):\n" + lines.join("\n"));
+}
 
 module.exports = {
   buildUpstreamRequest,

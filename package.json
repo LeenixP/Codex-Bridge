@@ -1,6 +1,6 @@
 {
   "name": "codex-switch",
-  "version": "0.1.1",
+  "version": "1.0.0",
   "private": true,
   "description": "Protocol bridge for Codex desktop -- converts OpenAI Chat and Anthropic APIs to OpenAI Responses format.",
   "author": "LeenixP",

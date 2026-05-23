@@ -71,6 +71,7 @@ function createSseBridge(res, responseId, model) {
 
   function handleReasoningDelta(delta) {
     if (!reasoningItem) {
+      closeMessage(); // flush any open message before starting a new reasoning block
       reasoningItem = { id: makeId("rs"), outputIndex: outputIndex++, text: "" };
       emitSse(res, "response.output_item.added", {
         type: "response.output_item.added",
