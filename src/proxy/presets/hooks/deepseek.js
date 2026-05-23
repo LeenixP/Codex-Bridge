@@ -98,21 +98,21 @@ function onMessagesBuilt(messages, requestBody, provider) {
       continue;
     }
 
-    var role = it.role || "user";
+    const role = it.role || "user";
     inputToMsg[i] = msgIdx++;
     lastRole = role;
   }
 
   // 3. Inject thinking blocks into the correct assistant messages.
   let injectedBlocks = 0;
-  for (var p = 0; p < pairs.length; p++) {
-    var pair = pairs[p];
-    var blocks = pair.blocks;
-    var targetIdx = pair.targetIdx;
+  for (let p = 0; p < pairs.length; p++) {
+    const pair = pairs[p];
+    const blocks = pair.blocks;
+    const targetIdx = pair.targetIdx;
 
     // Edge case: reasoning at end of input with no following message.
     if (targetIdx < 0) {
-      for (var rm = messages.length - 1; rm >= 0; rm--) {
+      for (let rm = messages.length - 1; rm >= 0; rm--) {
         if (messages[rm].role === "assistant") {
           injectIntoMessage(messages[rm], blocks, provider.protocol);
           injectedBlocks += blocks.length;
@@ -122,8 +122,8 @@ function onMessagesBuilt(messages, requestBody, provider) {
       continue;
     }
 
-    var m = inputToMsg[targetIdx];
-    if (m == null || m < 0 || m >= messages.length) {
+    const m = inputToMsg[targetIdx];
+    if (m === null || m === undefined || m < 0 || m >= messages.length) {
       log.warn(
         "[deepseek] target out of bounds: inputIdx=" + targetIdx + " → msgIdx=" + m +
         " (total " + messages.length + " msgs)",
@@ -134,8 +134,8 @@ function onMessagesBuilt(messages, requestBody, provider) {
     }
 
     if (messages[m].role !== "assistant") {
-      var found = false;
-      for (var fwd = m + 1; fwd < messages.length; fwd++) {
+      let found = false;
+      for (let fwd = m + 1; fwd < messages.length; fwd++) {
         if (messages[fwd].role === "assistant") {
           injectIntoMessage(messages[fwd], blocks, provider.protocol);
           injectedBlocks += blocks.length;
@@ -158,16 +158,16 @@ function onMessagesBuilt(messages, requestBody, provider) {
   }
 
   // 4. Diagnostic logging.
-  var totalAssistant = messages.reduce(function (c, msg) { return c + (msg.role === "assistant" ? 1 : 0); }, 0);
+  const totalAssistant = messages.reduce(function (c, msg) { return c + (msg.role === "assistant" ? 1 : 0); }, 0);
 
-  var totalReasoningItems = pairs.length;
-  var totalSummaries = pairs.reduce(function (c, p) { return c + p.blocks.length; }, 0);
+  const totalReasoningItems = pairs.length;
+  const totalSummaries = pairs.reduce(function (c, p) { return c + p.blocks.length; }, 0);
 
   // Dump reasoning→target pairing at debug level
   if (totalReasoningItems > 0) {
-    var pairLines = pairs.map(function (p, idx) {
-      var m = p.targetIdx >= 0 ? inputToMsg[p.targetIdx] : -1;
-      var role = (m >= 0 && m < messages.length) ? messages[m].role : "?";
+    const pairLines = pairs.map(function (p, idx) {
+      const m = p.targetIdx >= 0 ? inputToMsg[p.targetIdx] : -1;
+      const role = (m >= 0 && m < messages.length) ? messages[m].role : "?";
       return "  reasoning[" + idx + "] → input[" + p.targetIdx + "] → msg[" + m + "](" + role + ") blocks=" + p.blocks.length;
     });
     log.debug(
@@ -210,13 +210,13 @@ function onMessagesBuilt(messages, requestBody, provider) {
  */
 function buildThinkingBlocks(item) {
   if (!item || !item.summary) return [];
-  var summary = Array.isArray(item.summary) ? item.summary : [item.summary];
-  var blocks = [];
-  for (var j = 0; j < summary.length; j++) {
-    var text = summary[j].text || "";
+  const summary = Array.isArray(item.summary) ? item.summary : [item.summary];
+  const blocks = [];
+  for (let j = 0; j < summary.length; j++) {
+    const text = summary[j].text || "";
     if (!text) continue;
-    var sig = reasoningCache.get(text);
-    var block = { type: "thinking", thinking: text };
+    const sig = reasoningCache.get(text);
+    const block = { type: "thinking", thinking: text };
     if (sig) block.signature = sig;
     blocks.push(block);
   }
@@ -229,14 +229,14 @@ function buildThinkingBlocks(item) {
 function injectIntoMessage(msg, thinkingBlocks, protocol) {
   if (protocol === "anthropic") {
     if (typeof msg.content === "string") {
-      var arr = thinkingBlocks.slice();
+      const arr = thinkingBlocks.slice();
       arr.push({ type: "text", text: msg.content });
       msg.content = arr;
     } else if (Array.isArray(msg.content)) {
       // Prepend blocks that aren't already present (dedup by text match)
-      for (var b = thinkingBlocks.length - 1; b >= 0; b--) {
-        var block = thinkingBlocks[b];
-        var dup = msg.content.some(function (existing) {
+      for (let b = thinkingBlocks.length - 1; b >= 0; b--) {
+        const block = thinkingBlocks[b];
+        const dup = msg.content.some(function (existing) {
           return existing.type === "thinking" && existing.thinking === block.thinking;
         });
         if (!dup) {
@@ -246,18 +246,18 @@ function injectIntoMessage(msg, thinkingBlocks, protocol) {
     }
   } else {
     // openai-chat protocol: append reasoning_content
-    for (var i = 0; i < thinkingBlocks.length; i++) {
+    for (let i = 0; i < thinkingBlocks.length; i++) {
       msg.reasoning_content = (msg.reasoning_content || "") + thinkingBlocks[i].thinking;
     }
   }
 }
 
 function dumpThinkingBlocks(messages, provider) {
-  var lines = [];
-  for (var m = 0; m < messages.length; m++) {
-    var msg = messages[m];
+  const lines = [];
+  for (let m = 0; m < messages.length; m++) {
+    const msg = messages[m];
     if (msg.role !== "assistant") continue;
-    var content = msg.content;
+    const content = msg.content;
     if (typeof content === "string") {
       lines.push("  msg[" + m + "] assistant text(" + content.length + ")");
       continue;
@@ -266,10 +266,10 @@ function dumpThinkingBlocks(messages, provider) {
       lines.push("  msg[" + m + "] assistant <no content>");
       continue;
     }
-    var blocks = content.map(function (b) {
+    const blocks = content.map(function (b) {
       if (b.type === "thinking") {
-        var txt = (b.thinking || "");
-        var prefix = txt.length > 60 ? txt.slice(0, 60) + "..." : txt;
+        const txt = (b.thinking || "");
+        const prefix = txt.length > 60 ? txt.slice(0, 60) + "..." : txt;
         return "thinking(len=" + txt.length + ",sig=" + (b.signature ? "yes" : "NO") + ") " + prefix;
       }
       if (b.type === "text") {
@@ -288,18 +288,18 @@ function dumpThinkingBlocks(messages, provider) {
 }
 
 function dumpInputStructure(inputItems, messages, provider) {
-  var parts = [];
-  for (var i = 0; i < inputItems.length; i++) {
-    var it = inputItems[i];
+  const parts = [];
+  for (let i = 0; i < inputItems.length; i++) {
+    const it = inputItems[i];
     if (!it || typeof it !== "object") {
       parts.push("[" + i + "] " + typeof it);
       continue;
     }
-    var type = it.type || (it.role ? "role:" + it.role : "?");
-    var extra = "";
+    const type = it.type || (it.role ? "role:" + it.role : "?");
+    let extra = "";
     if (it.type === "reasoning") {
-      var summaries = Array.isArray(it.summary) ? it.summary : (it.summary ? [it.summary] : []);
-      var lens = summaries.map(function (s) { return (s.text || "").length; }).join(",");
+      const summaries = Array.isArray(it.summary) ? it.summary : (it.summary ? [it.summary] : []);
+      const lens = summaries.map(function (s) { return (s.text || "").length; }).join(",");
       extra = " summaries=" + summaries.length + " lens=[" + lens + "]";
     } else if (it.type === "function_call") {
       extra = " name=" + (it.name || "?") + " call_id=" + (it.call_id || it.id || "?");

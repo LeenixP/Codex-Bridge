@@ -7,6 +7,7 @@ const { createProxyServer, stopProxyServer, getStatus, getLastError } = require(
 const { injectCodexConfig, removeCodexConfig } = require("../codex/catalog");
 const { getQuickPresets, getVariantBaseUrl } = require("../proxy/presets");
 const log = require("../shared/logger");
+const { request } = require("undici");
 
 const PRODUCT_NAME = "Codex-Switch";
 
@@ -104,7 +105,6 @@ function registerIpcHandlers() {
   });
   ipcMain.handle("check-for-updates", async () => {
     try {
-      const { request } = require("undici");
       const res = await request("https://api.github.com/repos/LeenixP/Codex-Switch/releases/latest", {
         method: "GET",
         headers: { "Accept": "application/vnd.github+json", "User-Agent": "Codex-Switch" },
@@ -148,7 +148,7 @@ async function startProxy() {
   }
   await createProxyServer(settings, providers);
   if (providers && providers.length > 0 && providers.some((p) => p.name && p.model)) {
-    const result = injectCodexConfig(settings.port || 8629, providers);
+    const result = await injectCodexConfig(settings.port || 8629, providers);
     log.info(result.message);
   }
   notifyProxyStatus();
@@ -162,7 +162,6 @@ function notifyProxyStatus() {
 }
 
 async function testProviderConnection(provider) {
-  const { request } = require("undici");
   const baseUrl = (provider.baseUrl || "").replace(/\/+$/, "");
   const protocol = provider.protocol || "openai-chat";
 

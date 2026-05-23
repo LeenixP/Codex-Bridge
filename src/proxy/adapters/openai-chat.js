@@ -1,6 +1,7 @@
 "use strict";
 
 const { request } = require("undici");
+const log = require("../../shared/logger");
 const { parseSSEStream } = require("../../shared/stream");
 const {
   reasoningDeltaEvent,
@@ -225,7 +226,7 @@ async function streamUpstream(upstreamPayload, provider, emit) {
     if (chunk === "[DONE]") { streamEndedCleanly = true; break; }
 
     let data;
-    try { data = JSON.parse(chunk); } catch { console.warn("[openai-chat] unparseable SSE chunk"); continue; }
+    try { data = JSON.parse(chunk); } catch { log.warn("[openai-chat] unparseable SSE chunk"); continue; }
 
     if (data.usage) {
       usage = {

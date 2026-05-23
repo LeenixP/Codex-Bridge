@@ -1,6 +1,6 @@
 ﻿"use strict";
 
-const { execFileSync } = require("node:child_process");
+const { execFile } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -40,7 +40,25 @@ function findCodexCommand() {
   return "codex";
 }
 
-function readNativeCatalog(retries = 2) {
+function execFileAsync(cmd, args, options) {
+  return new Promise((resolve, reject) => {
+    execFile(cmd, args, options, (err, stdout, stderr) => {
+      if (err) {
+        err.stdout = stdout;
+        err.stderr = stderr;
+        reject(err);
+      } else {
+        resolve(stdout);
+      }
+    });
+  });
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function readNativeCatalog(retries = 2) {
   const command = findCodexCommand();
   const args = ["debug", "models", "--bundled"];
   const invocation = process.platform === "win32" && /\.(?:cmd|bat)$/i.test(command)
@@ -50,7 +68,7 @@ function readNativeCatalog(retries = 2) {
   let lastError = null;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const output = execFileSync(invocation.cmd, invocation.args, {
+      const output = await execFileAsync(invocation.cmd, invocation.args, {
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"],
         windowsHide: true,
@@ -63,7 +81,7 @@ function readNativeCatalog(retries = 2) {
       if (err.killed || err.code === "ETIMEDOUT") {
         if (attempt < retries) {
           const delay = Math.min(1000 * Math.pow(2, attempt), 4000);
-          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delay);
+          await sleep(delay);
         }
       } else {
         break;
@@ -109,10 +127,10 @@ function buildProxyModelEntry(baseModel, provider, proxyPort) {
   return entry;
 }
 
-function buildCatalog(providers, proxyPort) {
+async function buildCatalog(providers, proxyPort) {
   let nativeCatalog = null;
   try {
-    nativeCatalog = readNativeCatalog();
+    nativeCatalog = await readNativeCatalog();
   } catch (err) {
     return { ok: false, error: "Failed to read Codex catalog: " + err.message, models: [] };
   }
@@ -136,7 +154,7 @@ function writeCatalog(catalog, dataDir) {
   return catalogPath;
 }
 
-function injectCodexConfig(proxyPort, providers) {
+async function injectCodexConfig(proxyPort, providers) {
   const result = { ok: false, message: "", configPath: CODEX_CONFIG_FILE, authPath: CODEX_AUTH_FILE };
 
   if (!fs.existsSync(CODEX_CONFIG_DIR)) {
@@ -195,7 +213,7 @@ function injectCodexConfig(proxyPort, providers) {
   // gpt-5.4-mini directly to the upstream provider.
   let nativeModelSlugs = [];
   try {
-    const nativeCatalog = readNativeCatalog();
+    const nativeCatalog = await readNativeCatalog();
     if (nativeCatalog && Array.isArray(nativeCatalog.models)) {
       nativeModelSlugs = nativeCatalog.models.map(function (m) { return m.slug; });
     }
@@ -208,7 +226,7 @@ function injectCodexConfig(proxyPort, providers) {
     return '"' + slug + '" = "' + (activeProvider.model || modelName) + '"';
   });
 
-  // Build managed section 鈥?only provider definition + aliases (no top-level dupes)
+  // Build managed section — only provider definition + aliases (no top-level dupes)
   const section = [
     marker,
     "# Codex-Switch proxy configuration",

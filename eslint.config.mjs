@@ -105,7 +105,6 @@ export default [
       "no-constant-condition": ["error", { checkLoops: false }],
       "no-irregular-whitespace": "off",
       "no-empty": ["error", { allowEmptyCatch: true }],
-      quotes: ["off"],
     },
   },
   {

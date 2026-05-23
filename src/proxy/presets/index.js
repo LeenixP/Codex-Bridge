@@ -75,11 +75,6 @@ function resolvePreset(provider) {
   return null;
 }
 
-function getFeatures(provider) {
-  const preset = resolvePreset(provider);
-  return preset ? preset.features : {};
-}
-
 /** Return preset hooks (or null) for a provider. */
 function getHooks(provider) {
   const preset = resolvePreset(provider);
@@ -124,7 +119,6 @@ module.exports = {
   presets,
   getPreset,
   resolvePreset,
-  getFeatures,
   getHooks,
   getBaseUrl,
   getVariantBaseUrl,

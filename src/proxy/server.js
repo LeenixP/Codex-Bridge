@@ -10,7 +10,7 @@ let status = "stopped";
 let lastError = "";
 
 function createProxyServer(settings, providers) {
-  const port = settings.port || 8629;
+  const port = settings.port ?? 8629;
   const host = settings.host || "127.0.0.1";
 
   status = "starting";

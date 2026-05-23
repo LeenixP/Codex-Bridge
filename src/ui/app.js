@@ -274,7 +274,7 @@
   function renderProviders() {
     const list = document.getElementById("provider-list");
     if (!providers || providers.length === 0) {
-      list.innerHTML = '<div class="empty-state"><p>' + t("noProviders") + '</p><p>' + t("noProvidersHint") + '</p></div>';
+      list.innerHTML = '<div class="empty-state"><p>' + t("noProviders") + "</p><p>" + t("noProvidersHint") + "</p></div>";
       return;
     }
     list.innerHTML = providers.map((p, i) => providerCardHtml(p, i)).join("");
@@ -284,25 +284,25 @@
   function providerCardHtml(provider, index) {
     const activeClass = provider.active ? " active" : "";
     const protocolLabel = provider.protocol === "anthropic" ? t("protocolAnthropic") : t("protocolOpenAI");
-    const statusLabel = provider.active ? '<span class="status-badge active">' + t("active") + '</span>' : "";
-    const presetLabel = provider.preset ? '<span class="preset-tag">' + t("presetTag") + '</span>' : "";
+    const statusLabel = provider.active ? '<span class="status-badge active">' + t("active") + "</span>" : "";
+    const presetLabel = provider.preset ? '<span class="preset-tag">' + t("presetTag") + "</span>" : "";
     return '<div class="provider-card' + activeClass + '" data-index="' + index + '">' +
-      '<div class="provider-icon">' + protocolIcon(provider.protocol) + '</div>' +
+      '<div class="provider-icon">' + protocolIcon(provider.protocol) + "</div>" +
       '<div class="provider-info">' +
-      '<div class="provider-name">' + escapeHtml(provider.name) + ' ' + statusLabel + ' ' + presetLabel + '</div>' +
-      '<div class="provider-detail"><span class="protocol-badge">' + protocolLabel + '</span> ' + escapeHtml(provider.model || "") + '</div>' +
-      '<div class="provider-url">' + escapeHtml(provider.baseUrl || "") + '</div>' +
+      '<div class="provider-name">' + escapeHtml(provider.name) + " " + statusLabel + " " + presetLabel + "</div>" +
+      '<div class="provider-detail"><span class="protocol-badge">' + protocolLabel + "</span> " + escapeHtml(provider.model || "") + "</div>" +
+      '<div class="provider-url">' + escapeHtml(provider.baseUrl || "") + "</div>" +
       '<div class="feature-toggles">' +
-      '<label class="feature-toggle" title="' + t("labelVision") + '"><label class="toggle-switch"><input type="checkbox" class="toggle-vision" data-index="' + index + '"' + (provider.vision !== false ? " checked" : "") + '><span class="slider"></span></label><span>' + t("labelVision") + '</span></label>' +
-      '<label class="feature-toggle" title="' + t("labelImageGen") + '"><label class="toggle-switch"><input type="checkbox" class="toggle-imagegen" data-index="' + index + '"' + (provider.imageGen !== false ? " checked" : "") + '><span class="slider"></span></label><span>' + t("labelImageGen") + '</span></label>' +
-      '</div>' +
-      '</div>' +
+      '<label class="feature-toggle" title="' + t("labelVision") + '"><label class="toggle-switch"><input type="checkbox" class="toggle-vision" data-index="' + index + '"' + (provider.vision !== false ? " checked" : "") + '><span class="slider"></span></label><span>' + t("labelVision") + "</span></label>" +
+      '<label class="feature-toggle" title="' + t("labelImageGen") + '"><label class="toggle-switch"><input type="checkbox" class="toggle-imagegen" data-index="' + index + '"' + (provider.imageGen !== false ? " checked" : "") + '><span class="slider"></span></label><span>' + t("labelImageGen") + "</span></label>" +
+      "</div>" +
+      "</div>" +
       '<div class="provider-actions">' +
       (provider.active ? "" : '<button class="btn-icon btn-activate" title="' + t("activate") + '" aria-label="' + t("activate") + '"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></button>') +
       '<button class="btn-icon btn-test" title="' + t("testConn") + '" aria-label="' + t("testConn") + '"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></button>' +
       '<button class="btn-icon btn-edit" title="' + t("edit") + '" aria-label="' + t("edit") + '"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>' +
       '<button class="btn-icon btn-delete" title="' + t("delete") + '" aria-label="' + t("delete") + '"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>' +
-      '</div></div>';
+      "</div></div>";
   }
 
   function protocolIcon(protocol) {
@@ -423,21 +423,21 @@
     dialog.innerHTML = '<div class="dialog">' +
       '<div class="dialog-header"><h2 id="dialog-title">' + data.title + '</h2><button class="btn-close" id="dialog-close" aria-label="' + t("cancel") + '">&times;</button></div>' +
       '<div class="dialog-body">' +
-      '<div class="preset-buttons">' + PRESETS.map((p, i) => '<button class="btn-preset" data-preset="' + i + '">' + escapeHtml(p.name) + '</button>').join("") + '</div>' +
+      '<div class="preset-buttons">' + PRESETS.map((p, i) => '<button class="btn-preset" data-preset="' + i + '">' + escapeHtml(p.name) + "</button>").join("") + "</div>" +
       '<div class="form-group"><label for="dlg-name">' + t("labelName") + '</label><input type="text" id="dlg-name" value="' + escapeAttr(data.name) + '" placeholder="' + t("placeholderName") + '"></div>' +
-      '<div class="form-group"><label for="dlg-protocol">' + t("labelProtocol") + '</label><select id="dlg-protocol"><option value="openai-chat"' + (data.protocol === "openai-chat" ? " selected" : "") + '>' + t("protocolOpenAI") + '</option><option value="anthropic"' + (data.protocol === "anthropic" ? " selected" : "") + '>' + t("protocolAnthropic") + '</option></select></div>' +
+      '<div class="form-group"><label for="dlg-protocol">' + t("labelProtocol") + '</label><select id="dlg-protocol"><option value="openai-chat"' + (data.protocol === "openai-chat" ? " selected" : "") + ">" + t("protocolOpenAI") + '</option><option value="anthropic"' + (data.protocol === "anthropic" ? " selected" : "") + ">" + t("protocolAnthropic") + "</option></select></div>" +
       '<div class="form-group"><label for="dlg-baseurl">' + t("labelBaseUrl") + '</label><input type="text" id="dlg-baseurl" value="' + escapeAttr(data.baseUrl) + '" placeholder="' + t("placeholderBaseUrl") + '"></div>' +
       '<div class="form-group"><label for="dlg-apikey">' + t("labelApiKey") + '</label><input type="password" id="dlg-apikey" value="' + escapeAttr(data.apiKey) + '" placeholder="' + t("placeholderApiKey") + '"></div>' +
       '<div class="form-group"><label for="dlg-model">' + t("labelModel") + '</label><input type="text" id="dlg-model" value="' + escapeAttr(data.model) + '" placeholder="' + t("placeholderModel") + '"></div>' +
       '<div class="dialog-features">' +
       '<div class="dialog-feature"><label for="dlg-vision">' + t("labelVision") + '</label><label class="toggle-switch"><input type="checkbox" id="dlg-vision"' + (data.vision !== false ? " checked" : "") + '><span class="slider"></span></label></div>' +
       '<div class="dialog-feature"><label for="dlg-imagegen">' + t("labelImageGen") + '</label><label class="toggle-switch"><input type="checkbox" id="dlg-imagegen"' + (data.imageGen !== false ? " checked" : "") + '><span class="slider"></span></label></div>' +
-      '</div>' +
-      '</div>' +
+      "</div>" +
+      "</div>" +
       '<div class="dialog-footer">' +
-      '<button class="btn btn-secondary" id="dlg-cancel">' + t("cancel") + '</button>' +
-      '<button class="btn btn-primary" id="dlg-save">' + t("save") + '</button>' +
-      '</div></div>';
+      '<button class="btn btn-secondary" id="dlg-cancel">' + t("cancel") + "</button>" +
+      '<button class="btn btn-primary" id="dlg-save">' + t("save") + "</button>" +
+      "</div></div>";
 
     dialog.style.display = "flex";
 
@@ -573,7 +573,7 @@
   function renderLogs() {
     const list = document.getElementById("log-list");
     if (logEntries.length === 0) {
-      list.innerHTML = '<div class="empty-state"><p>' + t("noLogs") + '</p></div>';
+      list.innerHTML = '<div class="empty-state"><p>' + t("noLogs") + "</p></div>";
       return;
     }
 
@@ -583,13 +583,13 @@
 
     let html = "";
     if (olderCount > 0) {
-      html += '<div class="log-fold" id="log-fold-older"><span>' + t("logOlderEntries", { count: olderCount }) + ' <a href="#" id="btn-show-older">' + t("logShowAll") + '</a></span></div>';
+      html += '<div class="log-fold" id="log-fold-older"><span>' + t("logOlderEntries", { count: olderCount }) + ' <a href="#" id="btn-show-older">' + t("logShowAll") + "</a></span></div>";
     }
 
     // Render in reverse (newest first), newest at top
     for (let i = visible.length - 1; i >= 0; i--) {
       const e = visible[i];
-      html += '<div class="log-entry"><span class="log-time">' + e.time + '</span><span class="log-level ' + e.level + '">' + e.level + '</span><span class="log-message">' + escapeHtml(e.message) + '</span></div>';
+      html += '<div class="log-entry"><span class="log-time">' + e.time + '</span><span class="log-level ' + e.level + '">' + e.level + '</span><span class="log-message">' + escapeHtml(e.message) + "</span></div>";
     }
 
     list.innerHTML = html;
@@ -610,7 +610,7 @@
     // Reverse: newest first
     for (let i = logEntries.length - 1; i >= 0; i--) {
       const e = logEntries[i];
-      html += '<div class="log-entry"><span class="log-time">' + e.time + '</span><span class="log-level ' + e.level + '">' + e.level + '</span><span class="log-message">' + escapeHtml(e.message) + '</span></div>';
+      html += '<div class="log-entry"><span class="log-time">' + e.time + '</span><span class="log-level ' + e.level + '">' + e.level + '</span><span class="log-message">' + escapeHtml(e.message) + "</span></div>";
     }
     list.innerHTML = html;
   }

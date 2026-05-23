@@ -1,6 +1,7 @@
 "use strict";
 
 const { request } = require("undici");
+const log = require("../../shared/logger");
 const { parseSSEStream } = require("../../shared/stream");
 const reasoningCache = require("../core/reasoning-cache");
 const {
@@ -292,7 +293,7 @@ async function streamUpstream(upstreamPayload, provider, emit) {
 
   for await (const chunk of parseSSEStream(res.body)) {
     let data;
-    try { data = JSON.parse(chunk); } catch { console.warn("[anthropic] unparseable SSE chunk"); continue; }
+    try { data = JSON.parse(chunk); } catch { log.warn("[anthropic] unparseable SSE chunk"); continue; }
 
     const eventType = data.type;
 
@@ -392,20 +393,19 @@ async function streamUpstream(upstreamPayload, provider, emit) {
  */
 async function callUpstream(upstreamPayload, provider) {
   const payload = Object.assign({}, upstreamPayload, { stream: false });
+  const betas = payload._betas;
   delete payload._betas;
+  delete payload.thinking;
   const baseUrl = (provider.baseUrl || "https://api.anthropic.com").replace(/\/+$/, "");
   const url = baseUrl + "/v1/messages";
 
   const headers = {
     "Content-Type": "application/json",
     "x-api-key": provider.apiKey || "",
-    ...(upstreamPayload._betas && upstreamPayload._betas.length > 0
-      ? { "anthropic-beta": upstreamPayload._betas.join(",") }
+    ...(betas && betas.length > 0
+      ? { "anthropic-beta": betas.join(",") }
       : {}),
     "anthropic-version": "2023-06-01",
-    ...(upstreamPayload._betas && upstreamPayload._betas.length > 0
-      ? { "anthropic-beta": upstreamPayload._betas.join(",") }
-      : {}),
   };
 
   const res = await request(url, {
@@ -460,7 +460,7 @@ async function callUpstream(upstreamPayload, provider) {
 }
 
 
-function dumpRequestThinking(payload, provider) {
+function dumpRequestThinking(payload, _provider) {
   if (!payload || !Array.isArray(payload.messages)) return;
   const lines = [];
   for (let m = 0; m < payload.messages.length; m++) {
@@ -478,8 +478,8 @@ function dumpRequestThinking(payload, provider) {
     const hasThinking = content.some(function (b) { return b.type === "thinking"; });
     const blocks = content.map(function (b) {
       if (b.type === "thinking") {
-        var txt = (b.thinking || "");
-        var prefix = txt.length > 50 ? txt.slice(0, 50) + "..." : txt;
+        const txt = (b.thinking || "");
+        const prefix = txt.length > 50 ? txt.slice(0, 50) + "..." : txt;
         return "thinking(len=" + txt.length + ",sig=" + (b.signature ? "yes" : "NO") + ") " + prefix;
       }
       if (b.type === "text") return "text(" + (b.text ? b.text.length : 0) + ")";
@@ -489,7 +489,7 @@ function dumpRequestThinking(payload, provider) {
     });
     lines.push("  msg[" + m + "] assistant" + (hasThinking ? "" : " NO_THINKING") + ": [" + blocks.join(", ") + "]");
   }
-  console.warn("[anthropic] ERROR request thinking dump (" + payload.messages.length + " msgs):\n" + lines.join("\n"));
+  log.warn("[anthropic] ERROR request thinking dump (" + payload.messages.length + " msgs):\n" + lines.join("\n"));
 }
 
 module.exports = {
