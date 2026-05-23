@@ -3,8 +3,8 @@
 const http = require("node:http");
 const { createProxyServer, stopProxyServer } = require("../src/proxy/server");
 
-const PROXY_PORT = 19791;
-const MOCK_PORT = 19792;
+let PROXY_PORT = 0;
+let MOCK_PORT = 0;
 
 let mockServer = null;
 let passed = 0;
@@ -18,6 +18,16 @@ function assert(condition, message) {
     failed++;
     console.error("  FAIL: " + message);
   }
+}
+
+function getAvailablePort() {
+  return new Promise((resolve) => {
+    const s = http.createServer();
+    s.listen(0, "127.0.0.1", () => {
+      const port = s.address().port;
+      s.close(() => resolve(port));
+    });
+  });
 }
 
 function createMockErrorServer(mode, options) {
@@ -62,7 +72,10 @@ function createMockErrorServer(mode, options) {
         }
       });
     });
-    mockServer.listen(MOCK_PORT, "127.0.0.1", () => resolve());
+    mockServer.listen(0, "127.0.0.1", () => {
+      MOCK_PORT = mockServer.address().port;
+      resolve();
+    });
   });
 }
 
@@ -217,8 +230,8 @@ async function testAnthropicSyncError() {
     name: "Error Anth", protocol: "anthropic",
     baseUrl: "http://127.0.0.1:" + MOCK_PORT, apiKey: "tk", model: "claude-sonnet-4-20250514", active: true,
   }];
-  stopProxyServer();
-  createProxyServer({ port: PROXY_PORT, host: "127.0.0.1" }, providers);
+  await stopProxyServer();
+  await createProxyServer({ port: PROXY_PORT, host: "127.0.0.1" }, providers);
   await delay(200);
 
   const body = JSON.stringify({ model: "claude-sonnet-4-20250514", input: "hi", stream: false });
@@ -237,8 +250,8 @@ async function testAnthropicStreamInterruption() {
     name: "StreamErr Anth", protocol: "anthropic",
     baseUrl: "http://127.0.0.1:" + MOCK_PORT, apiKey: "tk", model: "claude-sonnet-4-20250514", active: true,
   }];
-  stopProxyServer();
-  createProxyServer({ port: PROXY_PORT, host: "127.0.0.1" }, providers);
+  await stopProxyServer();
+  await createProxyServer({ port: PROXY_PORT, host: "127.0.0.1" }, providers);
   await delay(200);
 
   const body = JSON.stringify({ model: "claude-sonnet-4-20250514", input: "hi", stream: true });
@@ -258,19 +271,28 @@ async function stopMockAndCreate(mode, options) {
   if (mockServer) mockServer.close();
   await delay(100);
   await createMockErrorServer(mode, options);
+  // Restart proxy with updated mock port (default openai-chat; Anthropic tests override below)
+  await stopProxyServer();
+  const providers = [{
+    name: "Error Test", protocol: "openai-chat",
+    baseUrl: "http://127.0.0.1:" + MOCK_PORT + "/v1", apiKey: "tk", model: "gpt-4o", active: true,
+  }];
+  await createProxyServer({ port: PROXY_PORT, host: "127.0.0.1" }, providers);
+  await delay(100);
 }
 
 async function main() {
   console.log("=== Codex-Switch Error Path Tests ===");
 
   // Setup with OpenAI Chat provider
+  PROXY_PORT = await getAvailablePort();
   await createMockErrorServer("status", { statusCode: 200, message: "ok" });
   console.log("[Setup] Mock error server on port " + MOCK_PORT);
   const providers = [{
     name: "Error Test", protocol: "openai-chat",
     baseUrl: "http://127.0.0.1:" + MOCK_PORT + "/v1", apiKey: "tk", model: "gpt-4o", active: true,
   }];
-  createProxyServer({ port: PROXY_PORT, host: "127.0.0.1" }, providers);
+  await createProxyServer({ port: PROXY_PORT, host: "127.0.0.1" }, providers);
   await delay(300);
   console.log("[Setup] Proxy server on port " + PROXY_PORT);
 
@@ -288,7 +310,7 @@ async function main() {
     failed++;
   }
 
-  stopProxyServer();
+  await stopProxyServer();
   if (mockServer) mockServer.close();
   await delay(100);
 

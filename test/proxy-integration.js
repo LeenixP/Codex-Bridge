@@ -3,8 +3,8 @@
 const http = require("node:http");
 const { createProxyServer, stopProxyServer } = require("../src/proxy/server");
 
-const PROXY_PORT = 19787;
-const MOCK_PORT = 19788;
+let PROXY_PORT = 0;
+let MOCK_PORT = 0;
 
 let mockServer = null;
 let passed = 0;
@@ -18,6 +18,16 @@ function assert(condition, message) {
     failed++;
     console.error("  FAIL: " + message);
   }
+}
+
+function getAvailablePort() {
+  return new Promise((resolve) => {
+    const s = http.createServer();
+    s.listen(0, "127.0.0.1", () => {
+      const port = s.address().port;
+      s.close(() => resolve(port));
+    });
+  });
 }
 
 function createMockOpenAIChatServer() {
@@ -50,7 +60,10 @@ function createMockOpenAIChatServer() {
         }
       });
     });
-    mockServer.listen(MOCK_PORT, "127.0.0.1", () => resolve());
+    mockServer.listen(0, "127.0.0.1", () => {
+      MOCK_PORT = mockServer.address().port;
+      resolve();
+    });
   });
 }
 
@@ -143,8 +156,8 @@ async function testResponsesStream() {
 
 async function testNoProvider() {
   console.log("\n[Test] No provider returns 503");
-  stopProxyServer();
-  createProxyServer({ port: PROXY_PORT, host: "127.0.0.1" }, []);
+  await stopProxyServer();
+  await createProxyServer({ port: PROXY_PORT, host: "127.0.0.1" }, []);
   await delay(200);
 
   const body = JSON.stringify({ model: "test", input: "hi", stream: false });
@@ -180,6 +193,7 @@ function delay(ms) {
 async function main() {
   console.log("=== Codex-Switch Proxy Integration Tests ===");
 
+  PROXY_PORT = await getAvailablePort();
   await createMockOpenAIChatServer();
   console.log("[Setup] Mock OpenAI Chat server on port " + MOCK_PORT);
 
@@ -192,7 +206,7 @@ async function main() {
     active: true,
   }];
 
-  createProxyServer({ port: PROXY_PORT, host: "127.0.0.1" }, providers);
+  await createProxyServer({ port: PROXY_PORT, host: "127.0.0.1" }, providers);
   await delay(300);
   console.log("[Setup] Proxy server on port " + PROXY_PORT);
 
@@ -207,7 +221,7 @@ async function main() {
     failed++;
   }
 
-  stopProxyServer();
+  await stopProxyServer();
   mockServer.close();
   await delay(100);
 
