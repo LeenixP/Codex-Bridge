@@ -3,6 +3,7 @@
 const { request } = require("undici");
 const log = require("../../shared/logger");
 const { parseSSEStream } = require("../../shared/stream");
+const { stripCodexFields } = require("../../shared/request-cleaner");
 const {
   reasoningDeltaEvent,
   textDeltaEvent,
@@ -194,12 +195,21 @@ function buildUpstreamRequest(requestBody, provider, _settings) {
   }
   if (requestBody.tools && requestBody.tools.length > 0) {
     payload.tools = convertTools(requestBody.tools);
+    if (payload.tools.length === 0) delete payload.tools; // all tools were non-function/non-custom
+  }
+  if (requestBody.tool_choice) {
+    payload.tool_choice = requestBody.tool_choice;
+  }
+  if (requestBody.parallel_tool_calls !== undefined) {
+    payload.parallel_tool_calls = requestBody.parallel_tool_calls;
   }
 
   // DeepSeek user_id for account-level isolation (KVCache / safety / scheduling)
   if (provider.userId) {
     payload.user_id = provider.userId;
   }
+
+  stripCodexFields(payload);
 
   return payload;
 }
@@ -220,6 +230,11 @@ function convertInputToMessages(requestBody, provider) {
   }
 
   if (Array.isArray(input)) {
+    // Collect reasoning summaries during the loop and inject them into the
+    // following assistant message. This is the generic path; vendor hooks
+    // (e.g. DeepSeek) replace these with signature-aware injection later.
+    let pendingReasoning = "";
+
     for (const item of input) {
       if (typeof item === "string") {
         messages.push({ role: "user", content: item });
@@ -228,27 +243,65 @@ function convertInputToMessages(requestBody, provider) {
       if (!item || typeof item !== "object") continue;
 
       if (item.role) {
-        messages.push(convertMessageItem(item, provider));
+        const msg = convertMessageItem(item, provider);
+        if (pendingReasoning && msg.role === "assistant") {
+          msg.reasoning_content = pendingReasoning;
+          pendingReasoning = "";
+        }
+        messages.push(msg);
         continue;
       }
 
       if (item.type === "message") {
-        messages.push(convertMessageItem(item, provider));
+        const msg = convertMessageItem(item, provider);
+        if (pendingReasoning && msg.role === "assistant") {
+          msg.reasoning_content = pendingReasoning;
+          pendingReasoning = "";
+        }
+        messages.push(msg);
+      } else if (item.type === "reasoning") {
+        const summaries = (item.summary || [])
+          .filter(s => s && s.type === "summary_text" && s.text)
+          .map(s => s.text);
+        if (summaries.length > 0) {
+          pendingReasoning = (pendingReasoning ? pendingReasoning + "\n" : "") + summaries.join("\n");
+        }
       } else if (item.type === "function_call") {
-        messages.push({
+        // function_call creates an assistant message — attach pending reasoning
+        const tc = {
           role: "assistant",
           tool_calls: [{
             id: item.call_id || item.id,
             type: "function",
             function: { name: item.name, arguments: item.arguments || "{}" },
           }],
-        });
+        };
+        if (pendingReasoning) {
+          tc.reasoning_content = pendingReasoning;
+          pendingReasoning = "";
+        }
+        messages.push(tc);
       } else if (item.type === "function_call_output") {
         messages.push({
           role: "tool",
           tool_call_id: item.call_id || item.id,
           content: typeof item.output === "string" ? item.output : JSON.stringify(item.output),
         });
+      }
+    }
+
+    // Flush any remaining reasoning into the last assistant message
+    if (pendingReasoning) {
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === "assistant") {
+          messages[i].reasoning_content = (messages[i].reasoning_content || "") +
+            (messages[i].reasoning_content ? "\n" : "") + pendingReasoning;
+          pendingReasoning = "";
+          break;
+        }
+      }
+      if (pendingReasoning) {
+        messages.push({ role: "assistant", content: "", reasoning_content: pendingReasoning });
       }
     }
   }
@@ -301,7 +354,7 @@ function convertResponseFormat(format) {
 
 function convertTools(tools) {
   return tools
-    .filter((t) => t && t.type === "function")
+    .filter((t) => t && (t.type === "function" || t.type === "custom"))
     .map((t) => ({
       type: "function",
       function: {

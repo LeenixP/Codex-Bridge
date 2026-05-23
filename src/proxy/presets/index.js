@@ -111,6 +111,7 @@ function getQuickPresets() {
       protocol: p.protocol,
       baseUrl: p.baseUrl,
       models: p.models || [],
+      vendor: !!p.hooks,
     };
   });
 }

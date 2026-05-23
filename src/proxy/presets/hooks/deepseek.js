@@ -233,22 +233,25 @@ function injectIntoMessage(msg, thinkingBlocks, protocol) {
       arr.push({ type: "text", text: msg.content });
       msg.content = arr;
     } else if (Array.isArray(msg.content)) {
-      // Prepend blocks that aren't already present (dedup by text match)
       for (let b = thinkingBlocks.length - 1; b >= 0; b--) {
         const block = thinkingBlocks[b];
-        const dup = msg.content.some(function (existing) {
+        const existingIdx = msg.content.findIndex(function (existing) {
           return existing.type === "thinking" && existing.thinking === block.thinking;
         });
-        if (!dup) {
+        if (existingIdx >= 0) {
+          // Upgrade: add signature if our block has one and existing doesn't
+          if (block.signature && !msg.content[existingIdx].signature) {
+            msg.content[existingIdx].signature = block.signature;
+          }
+        } else {
           msg.content.unshift(block);
         }
       }
     }
   } else {
-    // openai-chat protocol: append reasoning_content
-    for (let i = 0; i < thinkingBlocks.length; i++) {
-      msg.reasoning_content = (msg.reasoning_content || "") + thinkingBlocks[i].thinking;
-    }
+    // openai-chat protocol: overwrite (not append) so the hook's
+    // per-summary processing replaces the adapter's simpler concatenation
+    msg.reasoning_content = thinkingBlocks.map(function (b) { return b.thinking; }).join("\n");
   }
 }
 

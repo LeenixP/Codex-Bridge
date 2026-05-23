@@ -1,12 +1,14 @@
 "use strict";
 
-const { app, BrowserWindow, Menu, Tray, ipcMain, nativeImage, nativeTheme, shell } = require("electron");
+const { app, BrowserWindow, Menu, Tray, ipcMain, nativeImage, nativeTheme } = require("electron");
 const path = require("node:path");
+const { exec } = require("node:child_process");
 const { loadSettings, saveSettings, loadProviders, saveProviders } = require("../shared/config");
 const { createProxyServer, stopProxyServer, getStatus, getLastError } = require("../proxy/server");
 const { injectCodexConfig, removeCodexConfig } = require("../codex/catalog");
 const { getQuickPresets, getVariantBaseUrl } = require("../proxy/presets");
 const log = require("../shared/logger");
+const https = require("node:https");
 const { request } = require("undici");
 
 const PRODUCT_NAME = "Codex-Switch";
@@ -85,9 +87,15 @@ function registerIpcHandlers() {
     return { ok: true, message: "Codex-Switch config section removed." };
   });
   ipcMain.handle("open-external", (_, url) => {
-    if (typeof url === "string" && (url.startsWith("https://") || url.startsWith("http://"))) {
-      shell.openExternal(url);
-    }
+    if (typeof url !== "string" || !url.startsWith("http")) return;
+    const cmd = process.platform === "win32"
+      ? 'start "" "' + url + '"'
+      : process.platform === "darwin"
+        ? 'open "' + url + '"'
+        : 'xdg-open "' + url + '"';
+    exec(cmd, (err) => {
+      if (err) console.error("[open-external] Failed:", err.message);
+    });
   });
   ipcMain.handle("set-theme-source", (_, theme) => {
     nativeTheme.themeSource = theme;
@@ -104,27 +112,44 @@ function registerIpcHandlers() {
     return app.getVersion();
   });
   ipcMain.handle("check-for-updates", async () => {
-    try {
-      const res = await request("https://api.github.com/repos/LeenixP/Codex-Switch/releases/latest", {
-        method: "GET",
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        req.destroy();
+        resolve({ ok: false, message: "Request timed out (15s)" });
+      }, 15000);
+
+      const req = https.get("https://api.github.com/repos/LeenixP/Codex-Switch/releases/latest", {
         headers: { "Accept": "application/vnd.github+json", "User-Agent": "Codex-Switch" },
-        headersTimeout: 10000,
+      }, (res) => {
+        let data = "";
+        res.on("data", (chunk) => { data += chunk; });
+        res.on("end", () => {
+          clearTimeout(timer);
+          if (res.statusCode === 404) {
+            const current = app.getVersion();
+            resolve({ ok: true, current: "v" + current, latest: null, newer: false, url: null });
+            return;
+          }
+          if (res.statusCode !== 200) {
+            resolve({ ok: false, message: "GitHub API returned " + res.statusCode });
+            return;
+          }
+          try {
+            const body = JSON.parse(data);
+            const latest = (body.tag_name || "").replace(/^v/, "");
+            const current = app.getVersion();
+            const newer = compareVersions(latest, current) > 0;
+            resolve({ ok: true, current: "v" + current, latest: body.tag_name, newer, url: body.html_url });
+          } catch {
+            resolve({ ok: false, message: "Invalid response from GitHub" });
+          }
+        });
       });
-      if (res.statusCode === 404) {
-        const current = app.getVersion();
-        return { ok: true, current: "v" + current, latest: null, newer: false, url: null };
-      }
-      if (res.statusCode !== 200) {
-        return { ok: false, message: "GitHub API returned " + res.statusCode };
-      }
-      const body = await res.body.json();
-      const latest = (body.tag_name || "").replace(/^v/, "");
-      const current = app.getVersion();
-      const newer = compareVersions(latest, current) > 0;
-      return { ok: true, current: "v" + current, latest: body.tag_name, newer, url: body.html_url };
-    } catch (err) {
-      return { ok: false, message: err.message || "Network error" };
-    }
+      req.on("error", (err) => {
+        clearTimeout(timer);
+        resolve({ ok: false, message: err.message || "Network error" });
+      });
+    });
   });
 }
 
@@ -228,7 +253,7 @@ function createMainWindow() {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true,
+      sandbox: false,
       preload: path.join(__dirname, "preload.js"),
     },
   });

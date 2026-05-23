@@ -85,14 +85,38 @@
     });
   });
 
+  // Diagnostic logger — writes to About page
+  function diag(msg) {
+    const el = document.getElementById("diag-output");
+    if (el) {
+      el.style.display = "block";
+      el.textContent += "[" + new Date().toISOString().slice(11, 19) + "] " + msg + "\n";
+    }
+  }
+
   // Initialize
   async function init() {
+    // Diagnostic: check api shape
+    diag("init: api=" + (typeof api) + (api ? " keys=" + Object.keys(api).join(",") : " NULL"));
+    diag("init: api.getAppVersion=" + (api && typeof api.getAppVersion));
+    diag("init: api.openExternal=" + (api && typeof api.openExternal));
+    diag("init: api.checkForUpdates=" + (api && typeof api.checkForUpdates));
+    diag("init: lang=" + lang + " platform=" + (api ? api.platform : "?"));
+
+    // Run version + paths first — they must not depend on other IPC calls
+    showVersion();
+    showPaths();
+
     try {
       if (api) {
+        diag("init: reading settings...");
         settings = await api.getSettings();
+        diag("init: settings ok, port=" + settings.port + " theme=" + settings.theme);
         providers = await api.getProviders();
+        diag("init: providers ok, count=" + (providers ? providers.length : 0));
         lang = settings.language || "zh";
         const status = await api.getProxyStatus();
+        diag("init: proxy status=" + status);
         updateProxyStatus(status);
         api.onProxyStatusChange(updateProxyStatus);
         if (api.onLogEntry) {
@@ -108,6 +132,7 @@
       applySettings();
       applyTranslations();
     } catch (err) {
+      diag("init: ERROR " + (err.message || err));
       console.error("Failed to initialize:", err);
     }
 
@@ -134,6 +159,30 @@
     }
     updateProxyStatusLabel();
     updateProxyButton();
+  }
+
+  function showVersion() {
+    diag("showVersion: called");
+    if (!api) { diag("showVersion: api is NULL"); return; }
+    if (!api.getAppVersion) { diag("showVersion: api.getAppVersion is " + typeof api.getAppVersion); return; }
+    api.getAppVersion().then(function (v) {
+      diag("showVersion: got version=" + JSON.stringify(v));
+      var el = document.getElementById("app-version");
+      if (el) { el.textContent = "v" + v; diag("showVersion: DOM updated"); }
+      else diag("showVersion: #app-version not found");
+    }).catch(function (e) {
+      diag("showVersion: ERROR " + (e.message || e));
+    });
+  }
+
+  function showPaths() {
+    if (!api) return;
+    const dataDir = api.dataDir || "~/.codex-switch";
+    const traceDir = api.traceDir || (dataDir + "/trace");
+    const dataPathEl = document.getElementById("data-dir-path");
+    const tracePathEl = document.getElementById("trace-dir-path");
+    if (dataPathEl) dataPathEl.textContent = dataDir;
+    if (tracePathEl) tracePathEl.textContent = traceDir;
   }
 
   // Settings
@@ -297,7 +346,9 @@
     const activeClass = provider.active ? " active" : "";
     const protocolLabel = provider.protocol === "anthropic" ? t("protocolAnthropic") : t("protocolOpenAI");
     const statusLabel = provider.active ? '<span class="status-badge active">' + t("active") + "</span>" : "";
-    const presetLabel = provider.preset ? '<span class="preset-tag">' + t("presetTag") + "</span>" : "";
+    // Only vendor presets with hooks (e.g. deepseek) get the badge — not protocol templates
+    const isVendorPreset = provider.preset && provider.preset !== "openai-chat" && provider.preset !== "anthropic";
+    const presetLabel = isVendorPreset ? '<span class="preset-tag">' + t("presetTag") + "</span>" : "";
     const userIdLabel = provider.userId ? '<span class="userid-badge" title="' + t("labelUserId") + '">uid: ' + escapeHtml(provider.userId) + '</span>' : '';
     return '<div class="provider-card' + activeClass + '" data-index="' + index + '">' +
       '<div class="provider-icon">' + protocolIcon(provider.protocol) + "</div>" +
@@ -437,7 +488,7 @@
     dialog.innerHTML = '<div class="dialog">' +
       '<div class="dialog-header"><h2 id="dialog-title">' + data.title + '</h2><button class="btn-close" id="dialog-close" aria-label="' + t("cancel") + '">&times;</button></div>' +
       '<div class="dialog-body">' +
-      '<div class="preset-buttons">' + PRESETS.map((p, i) => '<button class="btn-preset" data-preset="' + i + '">' + escapeHtml(p.name) + "</button>").join("") + "</div>" +
+      '<div class="preset-buttons">' + PRESETS.map(function (p, i) { return '<button class="btn-preset" data-preset="' + i + '">' + escapeHtml(p.vendor ? p.name + " (" + t("presetVendorLabel") + ")" : p.name + " " + t("presetCompat")) + "</button>"; }).join("") + "</div>" +
       '<div class="form-group"><label for="dlg-name">' + t("labelName") + '</label><input type="text" id="dlg-name" value="' + escapeAttr(data.name) + '" placeholder="' + t("placeholderName") + '"></div>' +
       '<div class="form-group"><label for="dlg-protocol">' + t("labelProtocol") + '</label><select id="dlg-protocol"><option value="openai-chat"' + (data.protocol === "openai-chat" ? " selected" : "") + ">" + t("protocolOpenAI") + '</option><option value="anthropic"' + (data.protocol === "anthropic" ? " selected" : "") + ">" + t("protocolAnthropic") + "</option></select></div>" +
       '<div class="form-group"><label for="dlg-baseurl">' + t("labelBaseUrl") + '</label><input type="text" id="dlg-baseurl" value="' + escapeAttr(data.baseUrl) + '" placeholder="' + t("placeholderBaseUrl") + '"></div>' +
@@ -643,19 +694,19 @@
     return (text || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
-  // Update version display
-  if (api && api.getAppVersion) {
-    api.getAppVersion().then((v) => {
-      document.getElementById("app-version").textContent = "v" + v;
-    });
-  }
-
-  // GitHub / Feedback links
+  // Open URL in system browser
   function openLink(url) {
-    if (api) {
-      api.openExternal(url);
-    } else if (window.open) {
-      window.open(url, "_blank", "noopener");
+    diag("openLink: url=" + url);
+    if (!api) { diag("openLink: api is NULL"); return; }
+    if (!api.openExternal) { diag("openLink: api.openExternal is " + typeof api.openExternal); return; }
+    try {
+      api.openExternal(url).then(function () {
+        diag("openLink: resolved ok");
+      }).catch(function (e) {
+        diag("openLink: ERROR " + (e.message || e));
+      });
+    } catch (e) {
+      diag("openLink: SYNC ERROR " + (e.message || e));
     }
   }
   document.getElementById("link-github").addEventListener("click", () => {
@@ -668,15 +719,19 @@
   // Check for updates
   document.getElementById("btn-check-update").addEventListener("click", async () => {
     const statusEl = document.getElementById("update-status");
+    diag("checkUpdate: clicked");
     if (!api || !api.checkForUpdates) {
-      statusEl.textContent = t("updateError");
+      diag("checkUpdate: api or checkForUpdates missing, api=" + (typeof api) + " check=" + (api ? typeof api.checkForUpdates : "N/A"));
+      statusEl.textContent = t("updateError") + " (no IPC)";
       statusEl.className = "update-status error";
       return;
     }
     statusEl.textContent = t("updateChecking");
     statusEl.className = "update-status";
     try {
+      diag("checkUpdate: calling api.checkForUpdates...");
       const result = await api.checkForUpdates();
+      diag("checkUpdate: result=" + JSON.stringify(result));
       if (result.ok && result.latest === null) {
         statusEl.textContent = t("updateNoRelease");
         statusEl.className = "update-status latest";
@@ -693,8 +748,9 @@
         statusEl.textContent = result.message || t("updateError");
         statusEl.className = "update-status error";
       }
-    } catch {
-      statusEl.textContent = t("updateError");
+    } catch (e) {
+      diag("checkUpdate: EXCEPTION " + (e.message || e));
+      statusEl.textContent = t("updateError") + ": " + (e.message || e);
       statusEl.className = "update-status error";
     }
   });

@@ -1,6 +1,10 @@
 "use strict";
 
 const { contextBridge, ipcRenderer } = require("electron");
+const path = require("node:path");
+const os = require("node:os");
+
+const DATA_DIR = path.join(os.homedir(), ".codex-switch");
 
 contextBridge.exposeInMainWorld("codexSwitch", {
   getSettings: () => ipcRenderer.invoke("get-settings"),
@@ -28,4 +32,6 @@ contextBridge.exposeInMainWorld("codexSwitch", {
   },
   setLogLevel: (level) => ipcRenderer.invoke("set-log-level", level),
   platform: process.platform,
+  dataDir: DATA_DIR,
+  traceDir: path.join(DATA_DIR, "trace"),
 });

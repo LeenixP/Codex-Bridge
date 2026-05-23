@@ -1,6 +1,6 @@
 <div align="center">
 
-# Codex-Switch
+<img src="assets/banner.png" alt="Codex-Switch" width="600">
 
 [![CI](https://github.com/LeenixP/Codex-Switch/actions/workflows/ci.yml/badge.svg)](https://github.com/LeenixP/Codex-Switch/actions/workflows/ci.yml)
 [![License](https://img.shields.io/github/license/LeenixP/Codex-Switch)](LICENSE)

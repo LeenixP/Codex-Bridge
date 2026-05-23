@@ -4,6 +4,7 @@ const { request } = require("undici");
 const log = require("../../shared/logger");
 const { parseSSEStream } = require("../../shared/stream");
 const reasoningCache = require("../core/reasoning-cache");
+const { stripCodexFields } = require("../../shared/request-cleaner");
 const {
   reasoningDeltaEvent,
   textDeltaEvent,
@@ -197,12 +198,21 @@ function buildUpstreamRequest(requestBody, provider, _settings) {
 
   if (requestBody.tools && requestBody.tools.length > 0) {
     payload.tools = convertTools(requestBody.tools);
+    if (payload.tools.length === 0) delete payload.tools;
+  }
+  if (requestBody.tool_choice) {
+    payload.tool_choice = convertToolChoice(requestBody.tool_choice);
+  }
+  if (requestBody.parallel_tool_calls !== undefined) {
+    payload.disable_parallel_tool_use = !requestBody.parallel_tool_calls;
   }
 
   // DeepSeek user_id via Anthropic metadata (account-level isolation)
   if (provider.userId) {
     payload.metadata = { user_id: provider.userId };
   }
+
+  stripCodexFields(payload);
 
   return payload;
 }
@@ -219,6 +229,11 @@ function convertInputToMessages(requestBody, provider) {
   }
 
   if (Array.isArray(input)) {
+    // Collect reasoning summaries and inject them into the following
+    // assistant message. Vendor hooks (DeepSeek) upgrade these with
+    // signature-aware blocks later.
+    let pendingBlocks = [];
+
     for (const item of input) {
       if (typeof item === "string") {
         messages.push({ role: "user", content: item });
@@ -231,6 +246,10 @@ function convertInputToMessages(requestBody, provider) {
         if (converted.role === "system") {
           systemParts.push(typeof converted.content === "string" ? converted.content : "");
         } else {
+          if (pendingBlocks.length > 0 && converted.role === "assistant") {
+            prependThinkingBlocks(converted, pendingBlocks);
+            pendingBlocks = [];
+          }
           messages.push(converted);
         }
         continue;
@@ -241,7 +260,20 @@ function convertInputToMessages(requestBody, provider) {
         if (converted.role === "system") {
           systemParts.push(typeof converted.content === "string" ? converted.content : "");
         } else {
+          if (pendingBlocks.length > 0 && converted.role === "assistant") {
+            prependThinkingBlocks(converted, pendingBlocks);
+            pendingBlocks = [];
+          }
           messages.push(converted);
+        }
+      } else if (item.type === "reasoning") {
+        const summaries = Array.isArray(item.summary) ? item.summary : (item.summary ? [item.summary] : []);
+        for (const s of summaries) {
+          if (!s || s.type !== "summary_text" || !s.text) continue;
+          const sig = reasoningCache.get(s.text);
+          const block = { type: "thinking", thinking: s.text };
+          if (sig) block.signature = sig;
+          pendingBlocks.push(block);
         }
       } else if (item.type === "function_call") {
         const toolUse = {
@@ -261,7 +293,12 @@ function convertInputToMessages(requestBody, provider) {
             last.content = [toolUse];
           }
         } else {
-          messages.push({ role: "assistant", content: [toolUse] });
+          const newMsg = { role: "assistant", content: [toolUse] };
+          if (pendingBlocks.length > 0) {
+            prependThinkingBlocks(newMsg, pendingBlocks);
+            pendingBlocks = [];
+          }
+          messages.push(newMsg);
         }
       } else if (item.type === "function_call_output") {
         const toolResult = {
@@ -284,9 +321,43 @@ function convertInputToMessages(requestBody, provider) {
         }
       }
     }
+
+    // Flush any remaining pending blocks into the last assistant message
+    if (pendingBlocks.length > 0) {
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === "assistant") {
+          prependThinkingBlocks(messages[i], pendingBlocks);
+          pendingBlocks = [];
+          break;
+        }
+      }
+      if (pendingBlocks.length > 0) {
+        messages.push({ role: "assistant", content: pendingBlocks });
+      }
+    }
   }
 
   return { messages, systemParts };
+}
+
+function prependThinkingBlocks(msg, blocks) {
+  if (typeof msg.content === "string") {
+    msg.content = [...blocks, { type: "text", text: msg.content }];
+  } else if (Array.isArray(msg.content)) {
+    // Dedup: skip blocks already present (by text match)
+    const existingTexts = new Set(
+      msg.content
+        .filter(function (c) { return c.type === "thinking"; })
+        .map(function (c) { return c.thinking; })
+    );
+    for (let b = blocks.length - 1; b >= 0; b--) {
+      if (!existingTexts.has(blocks[b].thinking)) {
+        msg.content.unshift(blocks[b]);
+      }
+    }
+  } else {
+    msg.content = blocks;
+  }
 }
 
 function convertMessageItem(item, provider) {
@@ -321,12 +392,28 @@ function convertMessageItem(item, provider) {
 
 function convertTools(tools) {
   return tools
-    .filter((t) => t && t.type === "function")
+    .filter((t) => t && (t.type === "function" || t.type === "custom"))
     .map((t) => ({
       name: t.name,
       description: t.description || "",
       input_schema: t.parameters || t.input_schema || { type: "object", properties: {} },
     }));
+}
+
+function convertToolChoice(toolChoice) {
+  if (!toolChoice) return undefined;
+  if (typeof toolChoice === "string") {
+    switch (toolChoice) {
+      case "auto": return { type: "auto" };
+      case "required": return { type: "any" };
+      case "none": return undefined;
+      default: return { type: "tool", name: toolChoice };
+    }
+  }
+  if (toolChoice.type === "function") {
+    return { type: "tool", name: toolChoice.function && toolChoice.function.name };
+  }
+  return { type: "auto" };
 }
 
 function safeParseJson(value) {
@@ -524,7 +611,8 @@ async function callUpstream(upstreamPayload, provider, traceSession) {
   const payload = Object.assign({}, upstreamPayload, { stream: false });
   const betas = payload._betas;
   delete payload._betas;
-  delete payload.thinking;
+  // thinking config is preserved — Anthropic supports it in non-streaming mode
+  // unlike the _betas internal flag which must be sent via header
   const baseUrl = (provider.baseUrl || "https://api.anthropic.com").replace(/\/+$/, "");
   const url = baseUrl + "/v1/messages";
 
