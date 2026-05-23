@@ -34,15 +34,15 @@ function encryptKey(plaintext) {
 }
 
 function decryptKey(stored) {
-  if (!stored || typeof stored !== "string") return stored || "";
+  if (!stored || typeof stored !== "string") return "";
   if (!stored.startsWith(ENCRYPTED_PREFIX)) return stored;
   const ss = getSafeStorage();
-  if (!ss) return stored;
+  if (!ss) return "";
   try {
     const buf = Buffer.from(stored.slice(ENCRYPTED_PREFIX.length), "base64");
     return ss.decryptString(buf);
   } catch {
-    return stored;
+    return "";
   }
 }
 
@@ -67,7 +67,15 @@ function readJsonFile(filePath, fallback) {
 
 function writeJsonFile(filePath, data) {
   ensureDir(path.dirname(filePath));
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
+  const tmpPath = filePath + ".tmp." + Date.now();
+  fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), "utf8");
+  try {
+    fs.renameSync(tmpPath, filePath);
+  } catch {
+    // if rename fails, try direct write as fallback
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
+    try { fs.unlinkSync(tmpPath); } catch {}
+  }
 }
 
 function loadSettings() {

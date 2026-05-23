@@ -45,6 +45,12 @@ function createTraceSession(settings, model) {
       } catch {}
     },
 
+    logUpstream(payload) {
+      try {
+        fs.writeFileSync(reqPath.replace(/_req\.json$/, "_upstream.json"), JSON.stringify(payload, null, 2), "utf8");
+      } catch {}
+    },
+
     logRawChunk(chunk) {
       if (closed) return;
       rawBuf.push(chunk);

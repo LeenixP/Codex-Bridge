@@ -1,8 +1,7 @@
 "use strict";
 
-const { app, BrowserWindow, Menu, Tray, ipcMain, nativeImage, nativeTheme } = require("electron");
+const { app, BrowserWindow, Menu, Tray, ipcMain, nativeImage, nativeTheme, shell } = require("electron");
 const path = require("node:path");
-const { exec } = require("node:child_process");
 const { loadSettings, saveSettings, loadProviders, saveProviders } = require("../shared/config");
 const { createProxyServer, stopProxyServer, getStatus, getLastError } = require("../proxy/server");
 const { injectCodexConfig, removeCodexConfig } = require("../codex/catalog");
@@ -39,7 +38,7 @@ async function bootstrap() {
   log.setLevel(settings.logLevel || "info");
 
   // Apply dark title bar on Linux
-  nativeTheme.themeSource = settings.theme === "dark" ? "dark" : (settings.theme === "light" ? "light" : "system");
+  nativeTheme.themeSource = settings.theme === "dark" ? "dark" : settings.theme === "light" ? "light" : "system";
 
   registerIpcHandlers();
   createMainWindow();
@@ -51,16 +50,27 @@ async function bootstrap() {
   });
 }
 
+const SETTING_KEYS = ["port", "host", "theme", "language", "closeBehavior", "logLevel", "traceEnabled"];
+const THEME_VALUES = ["system", "light", "dark"];
+
 function registerIpcHandlers() {
   ipcMain.handle("get-settings", () => settings);
   ipcMain.handle("save-settings", (_, newSettings) => {
-    settings = Object.assign({}, settings, newSettings);
+    const sanitized = {};
+    for (const key of SETTING_KEYS) {
+      if (key in newSettings) sanitized[key] = newSettings[key];
+    }
+    if ("port" in sanitized && (!Number.isInteger(sanitized.port) || sanitized.port < 1 || sanitized.port > 65535)) {
+      sanitized.port = settings.port || 8629;
+    }
+    settings = Object.assign({}, settings, sanitized);
     saveSettings(settings);
     return settings;
   });
   ipcMain.handle("get-providers", () => providers);
   ipcMain.handle("save-providers", (_, newProviders) => {
-    providers = newProviders;
+    if (!Array.isArray(newProviders)) return providers;
+    providers = newProviders.filter(function (p) { return p && typeof p.name === "string"; });
     saveProviders(providers);
     return providers;
   });
@@ -87,18 +97,13 @@ function registerIpcHandlers() {
     return { ok: true, message: "Codex-Switch config section removed." };
   });
   ipcMain.handle("open-external", (_, url) => {
-    if (typeof url !== "string" || !url.startsWith("http")) return;
-    const cmd = process.platform === "win32"
-      ? 'start "" "' + url + '"'
-      : process.platform === "darwin"
-        ? 'open "' + url + '"'
-        : 'xdg-open "' + url + '"';
-    exec(cmd, (err) => {
-      if (err) console.error("[open-external] Failed:", err.message);
-    });
+    if (typeof url !== "string" || !url.startsWith("https://")) return;
+    return shell.openExternal(url);
   });
   ipcMain.handle("set-theme-source", (_, theme) => {
-    nativeTheme.themeSource = theme;
+    if (THEME_VALUES.includes(theme)) {
+      nativeTheme.themeSource = theme;
+    }
   });
   ipcMain.handle("get-presets", () => getQuickPresets());
   ipcMain.handle("get-variant-baseurl", (_, provider, protocol) => {
@@ -118,33 +123,39 @@ function registerIpcHandlers() {
         resolve({ ok: false, message: "Request timed out (15s)" });
       }, 15000);
 
-      const req = https.get("https://api.github.com/repos/LeenixP/Codex-Switch/releases/latest", {
-        headers: { "Accept": "application/vnd.github+json", "User-Agent": "Codex-Switch" },
-      }, (res) => {
-        let data = "";
-        res.on("data", (chunk) => { data += chunk; });
-        res.on("end", () => {
-          clearTimeout(timer);
-          if (res.statusCode === 404) {
-            const current = app.getVersion();
-            resolve({ ok: true, current: "v" + current, latest: null, newer: false, url: null });
-            return;
-          }
-          if (res.statusCode !== 200) {
-            resolve({ ok: false, message: "GitHub API returned " + res.statusCode });
-            return;
-          }
-          try {
-            const body = JSON.parse(data);
-            const latest = (body.tag_name || "").replace(/^v/, "");
-            const current = app.getVersion();
-            const newer = compareVersions(latest, current) > 0;
-            resolve({ ok: true, current: "v" + current, latest: body.tag_name, newer, url: body.html_url });
-          } catch {
-            resolve({ ok: false, message: "Invalid response from GitHub" });
-          }
-        });
-      });
+      const req = https.get(
+        "https://api.github.com/repos/LeenixP/Codex-Switch/releases/latest",
+        {
+          headers: { Accept: "application/vnd.github+json", "User-Agent": "Codex-Switch" },
+        },
+        (res) => {
+          let data = "";
+          res.on("data", (chunk) => {
+            data += chunk;
+          });
+          res.on("end", () => {
+            clearTimeout(timer);
+            if (res.statusCode === 404) {
+              const current = app.getVersion();
+              resolve({ ok: true, current: "v" + current, latest: null, newer: false, url: null });
+              return;
+            }
+            if (res.statusCode !== 200) {
+              resolve({ ok: false, message: "GitHub API returned " + res.statusCode });
+              return;
+            }
+            try {
+              const body = JSON.parse(data);
+              const latest = (body.tag_name || "").replace(/^v/, "");
+              const current = app.getVersion();
+              const newer = compareVersions(latest, current) > 0;
+              resolve({ ok: true, current: "v" + current, latest: body.tag_name, newer, url: body.html_url });
+            } catch {
+              resolve({ ok: false, message: "Invalid response from GitHub" });
+            }
+          });
+        },
+      );
       req.on("error", (err) => {
         clearTimeout(timer);
         resolve({ ok: false, message: err.message || "Network error" });
@@ -220,7 +231,7 @@ async function testProviderConnection(provider) {
     const res = await request(baseUrl + "/models", {
       method: "GET",
       headers: {
-        "Authorization": "Bearer " + (provider.apiKey || ""),
+        Authorization: "Bearer " + (provider.apiKey || ""),
       },
       headersTimeout: 10000,
     });
@@ -312,10 +323,16 @@ function updateTrayMenu() {
     type: "radio",
     checked: Boolean(p.active),
     click: () => {
-      providers.forEach((pr, idx) => { pr.active = idx === i; });
+      providers.forEach((pr, idx) => {
+        pr.active = idx === i;
+      });
       saveProviders(providers);
       if (proxyRunning) {
-        stopProxyServer().then(() => { removeCodexConfig(); notifyProxyStatus(); updateTrayMenu(); });
+        stopProxyServer().then(() => {
+          removeCodexConfig();
+          notifyProxyStatus();
+          updateTrayMenu();
+        });
         return;
       }
       updateTrayMenu();
@@ -325,16 +342,19 @@ function updateTrayMenu() {
   const template = [
     { label: trayLabel("showWindow"), click: () => showMainWindow() },
     { type: "separator" },
-    { label: proxyRunning ? trayLabel("stopProxy") : trayLabel("startProxy"), click: async () => {
-      if (proxyRunning) {
-        await stopProxyServer();
-        removeCodexConfig();
-        notifyProxyStatus();
-      } else {
-        await startProxy();
-      }
-      updateTrayMenu();
-    }},
+    {
+      label: proxyRunning ? trayLabel("stopProxy") : trayLabel("startProxy"),
+      click: async () => {
+        if (proxyRunning) {
+          await stopProxyServer();
+          removeCodexConfig();
+          notifyProxyStatus();
+        } else {
+          await startProxy();
+        }
+        updateTrayMenu();
+      },
+    },
     { label: trayLabel("port") + ": " + (settings.port || 8629), enabled: false },
     { type: "separator" },
     ...(providerItems.length > 0 ? [{ label: trayLabel("providers"), submenu: providerItems }] : []),

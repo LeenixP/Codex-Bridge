@@ -29,7 +29,12 @@ function genAllChecksums() {
     if (skipExts.has(ext)) continue;
 
     const fullPath = path.join(DIST_DIR, name);
-    const stat = fs.statSync(fullPath);
+    let stat;
+    try {
+      stat = fs.statSync(fullPath);
+    } catch {
+      continue;
+    }
     if (!stat.isFile()) continue;
 
     generateMd5For(fullPath);

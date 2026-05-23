@@ -9,6 +9,8 @@
 // under hooks/<vendor>.js.  This keeps presets/index.js lean.
 
 const deepseekHooks = require("./hooks/deepseek");
+const kimiHooks = require("./hooks/kimi");
+const kimiAnthropicHooks = require("./hooks/kimi-anthropic");
 
 // --- Preset registry ---------------------------------------------------------
 // Keys match provider.preset.  Protocol templates have an empty baseUrl so
@@ -21,7 +23,6 @@ const deepseekHooks = require("./hooks/deepseek");
 //   3. Done — no changes needed in the generic adapters.
 
 const presets = {
-
   // ---- Protocol templates ---------------------------------------------------
   "openai-chat": {
     id: "openai-chat",
@@ -48,12 +49,37 @@ const presets = {
     models: ["deepseek-v4-pro", "deepseek-v4-flash", "deepseek-v4-pro[1m]", "deepseek-v4-flash[1m]"],
     variants: {
       "openai-chat": "https://api.deepseek.com/v1",
-      "anthropic": "https://api.deepseek.com/anthropic",
+      anthropic: "https://api.deepseek.com/anthropic",
     },
     features: {
       reasoningPassthrough: true,
     },
     hooks: deepseekHooks,
+  },
+
+  // ---- Kimi / Moonshot presets -------------------------------------------
+  kimi: {
+    id: "kimi",
+    name: "Kimi (Moonshot)",
+    protocol: "openai-chat",
+    baseUrl: "https://api.moonshot.cn/v1",
+    models: ["kimi-k2.6"],
+    features: {},
+  },
+
+  "kimi-coding": {
+    id: "kimi-coding",
+    name: "Kimi For Coding",
+    protocol: "anthropic",
+    baseUrl: "https://api.kimi.com/coding",
+    models: ["kimi-for-coding"],
+    protocols: ["anthropic"],
+    variants: {
+      anthropic: "https://api.kimi.com/coding",
+      "openai-chat": "https://api.kimi.com/coding/v1",
+    },
+    features: {},
+    hooks: kimiAnthropicHooks,
   },
 };
 
@@ -78,7 +104,7 @@ function resolvePreset(provider) {
 /** Return preset hooks (or null) for a provider. */
 function getHooks(provider) {
   const preset = resolvePreset(provider);
-  return (preset && preset.hooks) ? preset.hooks : null;
+  return preset && preset.hooks ? preset.hooks : null;
 }
 
 /** Return the effective baseUrl: provider config wins over preset default. */
@@ -102,18 +128,23 @@ function getVariantBaseUrl(provider, protocol) {
   return getBaseUrl(provider);
 }
 
-/** List of presets suitable for the UI "quick add" buttons. */
+/** List of presets suitable for the UI "quick add" buttons.
+    Protocol templates (openai-chat, anthropic) are excluded — the UI
+    provides a unified "Custom" button instead. */
 function getQuickPresets() {
-  return Object.values(presets).map(function (p) {
-    return {
-      id: p.id,
-      name: p.name,
-      protocol: p.protocol,
-      baseUrl: p.baseUrl,
-      models: p.models || [],
-      vendor: !!p.hooks,
-    };
-  });
+  return Object.values(presets)
+    .filter(function (p) { return p.id !== "openai-chat" && p.id !== "anthropic"; })
+    .map(function (p) {
+      return {
+        id: p.id,
+        name: p.name,
+        protocol: p.protocol,
+        baseUrl: p.baseUrl,
+        models: p.models || [],
+        protocols: p.protocols || null,
+        vendor: !!p.hooks,
+      };
+    });
 }
 
 module.exports = {

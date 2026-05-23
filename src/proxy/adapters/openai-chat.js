@@ -4,6 +4,8 @@ const { request } = require("undici");
 const log = require("../../shared/logger");
 const { parseSSEStream } = require("../../shared/stream");
 const { stripCodexFields } = require("../../shared/request-cleaner");
+const { ThinkingTagStreamParser, extractThinkingTags } = require("../../shared/thinking-parser");
+const { getHooks } = require("../presets");
 const {
   reasoningDeltaEvent,
   textDeltaEvent,
@@ -14,163 +16,14 @@ const {
   errorEvent,
 } = require("../core/events");
 
-// ---------------------------------------------------------------------------
-// Thinking tag stream parser
-// ---------------------------------------------------------------------------
-// Detects <thinking>, <think>, <thought>, <reasoning> tags inside streaming
-// text content and splits deltas into reasoning (inside tags) vs. text
-// (outside). Needed for GLM and other providers that inline thinking in the
-// content field rather than using a separate reasoning_content field.
-//
-// Tags are case-insensitive.  Unclosed tags at stream-end are flushed as
-// regular text so nothing is lost.
-
-const THINKING_OPEN_RE = /<\s*(think(?:ing)?|thought|reasoning)\s*>/i;
-
-// Normalize tag family: think/thinking → thinking, thought → reasoning
-function normalizeTagName(name) {
-  const n = name.toLowerCase();
-  if (n === "think") return "thinking";
-  if (n === "thought") return "reasoning";
-  return n;
-}
-
-// Return all closing-tag strings that could close a given normalized tag.
-// "thinking" can be closed by </thinking> or </think>.
-// "reasoning" can be closed by </reasoning> or </thought>.
-function closeTagVariants(normalized) {
-  if (normalized === "thinking") return ["</thinking>", "</think>"];
-  if (normalized === "reasoning") return ["</reasoning>", "</thought>"];
-  return ["</" + normalized + ">"];
-}
-
-// Find the earliest close-tag match among the variants, returning
-// { index, length } or null.  Case-insensitive.
-function findCloseTag(buf, normalized) {
-  const variants = closeTagVariants(normalized);
-  let best = null;
-  for (const v of variants) {
-    const idx = buf.toLowerCase().indexOf(v.toLowerCase());
-    if (idx >= 0 && (best === null || idx < best.index)) {
-      best = { index: idx, length: v.length };
-    }
-  }
-  return best;
-}
-
-// Check if the tail of `buf` is a prefix of any close-tag variant.  Returns
-// the number of chars to keep (the length of the longest matching prefix).
-// This prevents closing tags split across SSE chunks from leaking.
-function maybePartialCloseTag(buf, normalized) {
-  if (buf.length === 0) return 0;
-  const variants = closeTagVariants(normalized);
-  const lower = buf.toLowerCase();
-  for (const v of variants) {
-    const lowerV = v.toLowerCase();
-    // Check every suffix of buf that could be a prefix of this variant
-    for (let keep = 1; keep <= Math.min(buf.length, lowerV.length - 1); keep++) {
-      const suffix = lower.slice(-keep);
-      if (lowerV.startsWith(suffix)) return keep;
-    }
-  }
-  return 0;
-}
-
-class ThinkingTagStreamParser {
-  constructor() {
-    this._buf = "";
-    this._inTag = false;
-    this._tagName = "";
-  }
-
-  feed(chunk) {
-    this._buf += chunk;
-    let reasoning = "";
-    let text = "";
-
-    while (this._buf.length > 0) {
-      if (!this._inTag) {
-        const m = this._buf.match(THINKING_OPEN_RE);
-        if (!m) {
-          // Keep a look-behind window for a partial opening tag.
-          const lt = this._buf.lastIndexOf("<");
-          if (lt >= 0 && this._buf.length - lt <= 20) {
-            text += this._buf.slice(0, lt);
-            this._buf = this._buf.slice(lt);
-            break;
-          }
-          text += this._buf;
-          this._buf = "";
-          break;
-        }
-        text += this._buf.slice(0, m.index);
-        this._buf = this._buf.slice(m.index + m[0].length);
-        this._inTag = true;
-        this._tagName = normalizeTagName(m[1]);
-      } else {
-        const found = findCloseTag(this._buf, this._tagName);
-        if (!found) {
-          const keep = maybePartialCloseTag(this._buf, this._tagName);
-          if (keep > 0) {
-            reasoning += this._buf.slice(0, -keep);
-            this._buf = this._buf.slice(-keep);
-            break;
-          }
-          reasoning += this._buf;
-          this._buf = "";
-          break;
-        }
-        reasoning += this._buf.slice(0, found.index);
-        this._buf = this._buf.slice(found.index + found.length);
-        this._inTag = false;
-        this._tagName = "";
-      }
-    }
-
-    return { reasoning, text };
-  }
-
-  flush() {
-    if (this._inTag) {
-      const result = { reasoning: "", text: "<" + this._tagName + ">" + this._buf };
-      this._buf = "";
-      this._inTag = false;
-      this._tagName = "";
-      return result;
-    }
-    const result = { reasoning: "", text: this._buf };
-    this._buf = "";
-    return result;
-  }
-}
-
-/**
- * Build an OpenAI Chat Completions request from a Codex Responses API request body.
- *
- * Converts Responses-format input into Chat Completions messages, mapping:
- *   instructions → system role message
- *   max_output_tokens → max_completion_tokens
- *   reasoning.effort → reasoning_effort
- *   text.format → response_format (json_object / json_schema)
- *   tools (function type) → tools array with function definitions
- *   input_image content parts → image_url parts
- *
- * @param {object} requestBody - Codex Responses API request body
- * @param {string} requestBody.model - Model ID
- * @param {string|Array} requestBody.input - User input (string or content array)
- * @param {string} [requestBody.instructions] - System instructions
- * @param {boolean} [requestBody.stream=true] - Whether to stream
- * @param {number} [requestBody.max_output_tokens] - Max completion tokens
- * @param {number} [requestBody.temperature] - Sampling temperature
- * @param {number} [requestBody.top_p] - Nucleus sampling parameter
- * @param {object} [requestBody.reasoning] - Reasoning effort config
- * @param {object} [requestBody.text] - Text format config
- * @param {object[]} [requestBody.tools] - Tool definitions
- * @param {object} provider - Provider configuration
- * @param {string} provider.model - Default model override
- * @returns {object} OpenAI Chat Completions request payload
- */
 function buildUpstreamRequest(requestBody, provider, _settings) {
+  if (typeof requestBody.input === "string") {
+    if (requestBody.input.trim()) {
+      requestBody.input = [{ role: "user", content: requestBody.input }];
+    } else {
+      requestBody.input = [];
+    }
+  }
   const messages = convertInputToMessages(requestBody, provider);
   const payload = {
     model: provider.model || requestBody.model,
@@ -188,23 +41,22 @@ function buildUpstreamRequest(requestBody, provider, _settings) {
     payload.top_p = requestBody.top_p;
   }
   if (requestBody.reasoning && requestBody.reasoning.effort) {
-    payload.reasoning_effort = requestBody.reasoning.effort;
+    payload.reasoning_effort = normalizeReasoningEffort(requestBody.reasoning.effort);
+    payload._reasoning_effort = requestBody.reasoning.effort;
   }
   if (requestBody.text && requestBody.text.format) {
     payload.response_format = convertResponseFormat(requestBody.text.format);
   }
   if (requestBody.tools && requestBody.tools.length > 0) {
     payload.tools = convertTools(requestBody.tools);
-    if (payload.tools.length === 0) delete payload.tools; // all tools were non-function/non-custom
+    if (payload.tools.length === 0) delete payload.tools;
   }
   if (requestBody.tool_choice) {
-    payload.tool_choice = requestBody.tool_choice;
+    payload.tool_choice = convertToolChoice(requestBody.tool_choice);
   }
   if (requestBody.parallel_tool_calls !== undefined) {
     payload.parallel_tool_calls = requestBody.parallel_tool_calls;
   }
-
-  // DeepSeek user_id for account-level isolation (KVCache / safety / scheduling)
   if (provider.userId) {
     payload.user_id = provider.userId;
   }
@@ -212,6 +64,12 @@ function buildUpstreamRequest(requestBody, provider, _settings) {
   stripCodexFields(payload);
 
   return payload;
+}
+
+function normalizeReasoningEffort(effort) {
+  if (effort === "max") return "high";
+  if (effort === "xhigh") return "high";
+  return effort;
 }
 
 function convertInputToMessages(requestBody, provider) {
@@ -230,9 +88,6 @@ function convertInputToMessages(requestBody, provider) {
   }
 
   if (Array.isArray(input)) {
-    // Collect reasoning summaries during the loop and inject them into the
-    // following assistant message. This is the generic path; vendor hooks
-    // (e.g. DeepSeek) replace these with signature-aware injection later.
     let pendingReasoning = "";
 
     for (const item of input) {
@@ -248,7 +103,19 @@ function convertInputToMessages(requestBody, provider) {
           msg.reasoning_content = pendingReasoning;
           pendingReasoning = "";
         }
-        messages.push(msg);
+
+        // Merge consecutive system messages — OpenAI Chat API only
+        // allows at most one system message.  Codex sends instructions as
+        // a top-level field AND embeds instructions in a developer-role
+        // input item, so we get two system messages after mapping.
+        if (msg.role === "system" && messages.length > 0 && messages[messages.length - 1].role === "system") {
+          var prev = messages[messages.length - 1];
+          var prevContent = typeof prev.content === "string" ? prev.content : "";
+          var newContent = typeof msg.content === "string" ? msg.content : "";
+          prev.content = prevContent + "\n\n" + newContent;
+        } else {
+          messages.push(msg);
+        }
         continue;
       }
 
@@ -260,21 +127,21 @@ function convertInputToMessages(requestBody, provider) {
         }
         messages.push(msg);
       } else if (item.type === "reasoning") {
-        const summaries = (item.summary || [])
-          .filter(s => s && s.type === "summary_text" && s.text)
-          .map(s => s.text);
-        if (summaries.length > 0) {
-          pendingReasoning = (pendingReasoning ? pendingReasoning + "\n" : "") + summaries.join("\n");
+        const summaries = Array.isArray(item.summary) ? item.summary : item.summary ? [item.summary] : [];
+        const texts = summaries.filter((s) => s && s.type === "summary_text" && s.text).map((s) => s.text);
+        if (texts.length > 0) {
+          pendingReasoning = (pendingReasoning ? pendingReasoning + "\n" : "") + texts.join("\n");
         }
       } else if (item.type === "function_call") {
-        // function_call creates an assistant message — attach pending reasoning
         const tc = {
           role: "assistant",
-          tool_calls: [{
-            id: item.call_id || item.id,
-            type: "function",
-            function: { name: item.name, arguments: item.arguments || "{}" },
-          }],
+          tool_calls: [
+            {
+              id: item.call_id || item.id,
+              type: "function",
+              function: { name: item.name, arguments: item.arguments || "{}" },
+            },
+          ],
         };
         if (pendingReasoning) {
           tc.reasoning_content = pendingReasoning;
@@ -287,15 +154,52 @@ function convertInputToMessages(requestBody, provider) {
           tool_call_id: item.call_id || item.id,
           content: typeof item.output === "string" ? item.output : JSON.stringify(item.output),
         });
+      } else if (item.type === "web_search_call") {
+        messages.push({
+          role: "assistant",
+          tool_calls: [{
+            id: item.call_id || "ws_" + Math.random().toString(36).slice(2, 10),
+            type: "function",
+            function: {
+              name: "web_search",
+              arguments: JSON.stringify(item.action || {}),
+            },
+          }],
+        });
+      } else if (item.type === "web_search_call_output") {
+        messages.push({
+          role: "tool",
+          tool_call_id: item.call_id,
+          content: typeof item.output === "string" ? item.output : JSON.stringify(item.output || ""),
+        });
+      } else if (item.type === "custom_tool_call") {
+        messages.push({
+          role: "assistant",
+          tool_calls: [{
+            id: item.call_id || "ct_" + Math.random().toString(36).slice(2, 10),
+            type: "function",
+            function: {
+              name: item.name || "custom_tool",
+              arguments: typeof item.input === "string" ? item.input : JSON.stringify(item.input || {}),
+            },
+          }],
+        });
+      } else if (item.type === "custom_tool_call_output") {
+        messages.push({
+          role: "tool",
+          tool_call_id: item.call_id,
+          content: typeof item.output === "string" ? item.output : JSON.stringify(item.output || ""),
+        });
+      } else if (item.type === "compaction" || item.type === "compaction_trigger") {
+        continue;
       }
     }
 
-    // Flush any remaining reasoning into the last assistant message
     if (pendingReasoning) {
       for (let i = messages.length - 1; i >= 0; i--) {
         if (messages[i].role === "assistant") {
-          messages[i].reasoning_content = (messages[i].reasoning_content || "") +
-            (messages[i].reasoning_content ? "\n" : "") + pendingReasoning;
+          messages[i].reasoning_content =
+            (messages[i].reasoning_content || "") + (messages[i].reasoning_content ? "\n" : "") + pendingReasoning;
           pendingReasoning = "";
           break;
         }
@@ -310,7 +214,11 @@ function convertInputToMessages(requestBody, provider) {
 }
 
 function convertMessageItem(item, provider) {
-  const role = item.role || "user";
+  // Map developer role to system — OpenAI Chat API only accepts
+  // system/user/assistant/tool roles. developer is a Responses
+  // API concept that some providers reject.
+  var rawRole = item.role || "user";
+  var role = rawRole === "developer" ? "system" : rawRole;
   if (typeof item.content === "string") {
     return { role, content: item.content };
   }
@@ -328,10 +236,20 @@ function convertMessageItem(item, provider) {
         }
       }
     }
+    if (parts.length === 0) return { role, content: "" };
     if (parts.length === 1 && parts[0].type === "text") {
       return { role, content: parts[0].text };
     }
-    return { role, content: parts.length > 0 ? parts : "" };
+    // System messages must use string content per OpenAI Chat API.
+    // Join multiple text parts so composite instructions work correctly.
+    if (role === "system") {
+      var joined = parts
+        .filter(function (p) { return p.type === "text"; })
+        .map(function (p) { return p.text; })
+        .join("\n\n");
+      return { role: "system", content: joined || "" };
+    }
+    return { role, content: parts };
   }
   return { role, content: "" };
 }
@@ -353,43 +271,48 @@ function convertResponseFormat(format) {
 }
 
 function convertTools(tools) {
-  return tools
-    .filter((t) => t && (t.type === "function" || t.type === "custom"))
-    .map((t) => ({
-      type: "function",
-      function: {
-        name: t.name,
-        description: t.description || "",
-        parameters: t.parameters || t.input_schema || {},
-      },
-    }));
+  return tools.flatMap((t) => {
+    if (!t) return [];
+    if (t.type === "function" || t.type === "custom") {
+      return [{
+        type: "function",
+        function: {
+          name: t.name,
+          description: t.description || "",
+          parameters: t.parameters || t.input_schema || {},
+        },
+      }];
+    }
+    if (t.type === "namespace" && Array.isArray(t.tools)) {
+      return t.tools
+        .filter((sub) => sub && (sub.type === "function" || sub.type === "custom"))
+        .map((sub) => ({
+          type: "function",
+          function: {
+            name: t.name + "__" + sub.name,
+            description: sub.description || "",
+            parameters: sub.parameters || sub.input_schema || {},
+          },
+        }));
+    }
+    return [];
+  });
 }
 
-/**
- * Stream an OpenAI Chat Completions request and emit Responses API SSE events.
- *
- * Parses SSE chunks from the upstream, tracking tool call state across deltas.
- * Emits: reasoningDeltaEvent, textDeltaEvent, toolCallStartEvent,
- *        toolCallArgsDeltaEvent, toolCallEndEvent, responseCompletedEvent, errorEvent.
- *
- * If the stream ends without [DONE], emits a stream_interrupted error.
- *
- * @param {object} upstreamPayload - Payload from buildUpstreamRequest
- * @param {object} provider - Provider configuration
- * @param {string} provider.baseUrl - API base URL
- * @param {string} provider.apiKey - API key
- * @param {function} emit - Callback receiving event objects (from events.js factory functions)
- * @param {object} [traceSession] - Optional trace session for raw SSE capture
- * @returns {Promise<void>}
- */
 async function streamUpstream(upstreamPayload, provider, emit, traceSession) {
   const baseUrl = (provider.baseUrl || "https://api.openai.com/v1").replace(/\/+$/, "");
   const url = baseUrl + "/chat/completions";
 
-  const headers = {
-    "Content-Type": "application/json",
-    "Authorization": "Bearer " + (provider.apiKey || ""),
-  };
+  const hooks = getHooks(provider);
+  const extraHeaders = hooks && hooks.getHeaders ? hooks.getHeaders(provider) : {};
+
+  const headers = Object.assign(
+    {
+      "Content-Type": "application/json",
+      Authorization: "Bearer " + (provider.apiKey || ""),
+    },
+    extraHeaders,
+  );
 
   const res = await request(url, {
     method: "POST",
@@ -400,9 +323,13 @@ async function streamUpstream(upstreamPayload, provider, emit, traceSession) {
   });
 
   if (res.statusCode !== 200) {
-    const body = await res.body.text();
+    const errorBody = await res.body.text();
     let msg = "Upstream returned HTTP " + res.statusCode;
-    try { msg = JSON.parse(body).error.message || msg; } catch {}
+    try {
+      const parsed = JSON.parse(errorBody);
+      msg = (parsed.error && parsed.error.message) || msg;
+    } catch {}
+    if (traceSession) traceSession.logRawLine("[ERROR] " + res.statusCode + " " + msg);
     emit(errorEvent(msg, "upstream_" + res.statusCode));
     return;
   }
@@ -414,10 +341,18 @@ async function streamUpstream(upstreamPayload, provider, emit, traceSession) {
 
   for await (const chunk of parseSSEStream(res.body)) {
     if (traceSession) traceSession.logRawLine(chunk);
-    if (chunk === "[DONE]") { streamEndedCleanly = true; break; }
+    if (chunk === "[DONE]") {
+      streamEndedCleanly = true;
+      break;
+    }
 
     let data;
-    try { data = JSON.parse(chunk); } catch { log.warn("[openai-chat] unparseable SSE chunk"); continue; }
+    try {
+      data = JSON.parse(chunk);
+    } catch {
+      log.warn("[openai-chat] unparseable SSE chunk");
+      continue;
+    }
 
     if (data.usage) {
       usage = {
@@ -432,21 +367,16 @@ async function streamUpstream(upstreamPayload, provider, emit, traceSession) {
     const delta = choice.delta;
     if (!delta) continue;
 
-    // Reasoning content (DeepSeek, o-series, Kimi, etc.)
     if (delta.reasoning_content) {
       emit(reasoningDeltaEvent(delta.reasoning_content));
     }
 
-    // Text content — run through thinking-tag parser so providers that inline
-    // <thinking>…</thinking> inside `content` (GLM, etc.) get their reasoning
-    // split out into proper reasoning events.
     if (delta.content) {
       const parsed = thinkParser.feed(delta.content);
       if (parsed.reasoning) emit(reasoningDeltaEvent(parsed.reasoning));
       if (parsed.text) emit(textDeltaEvent(parsed.text));
     }
 
-    // Tool calls — standard OpenAI array format
     if (delta.tool_calls) {
       for (const tc of delta.tool_calls) {
         const idx = tc.index !== undefined ? tc.index : 0;
@@ -468,7 +398,6 @@ async function streamUpstream(upstreamPayload, provider, emit, traceSession) {
       }
     }
 
-    // Fallback: older single function_call format (some Chinese LLMs)
     if (!delta.tool_calls && delta.function_call) {
       const fc = delta.function_call;
       const idx = 0;
@@ -489,7 +418,6 @@ async function streamUpstream(upstreamPayload, provider, emit, traceSession) {
       }
     }
 
-    // Finish
     if (choice.finish_reason) {
       streamEndedCleanly = true;
       for (const [, tc] of Object.entries(toolCalls)) {
@@ -500,7 +428,6 @@ async function streamUpstream(upstreamPayload, provider, emit, traceSession) {
     }
   }
 
-  // Flush any remaining content buffered in the thinking tag parser
   const flushed = thinkParser.flush();
   if (flushed.reasoning) emit(reasoningDeltaEvent(flushed.reasoning));
   if (flushed.text) emit(textDeltaEvent(flushed.text));
@@ -513,26 +440,21 @@ async function streamUpstream(upstreamPayload, provider, emit, traceSession) {
   emit(responseCompletedEvent(usage));
 }
 
-/**
- * Make a non-streaming OpenAI Chat Completions request.
- *
- * Returns a structured result with text, reasoning, toolCalls, and usage fields.
- * On error, throws an Error with a `statusCode` property set to the HTTP status.
- *
- * @param {object} upstreamPayload - Payload from buildUpstreamRequest
- * @param {object} provider - Provider configuration
- * @param {object} [traceSession] - Optional trace session for raw response capture
- * @returns {Promise<{text: string, reasoning: string, toolCalls: Array, usage: object|null}>}
- */
 async function callUpstream(upstreamPayload, provider, traceSession) {
   const payload = Object.assign({}, upstreamPayload, { stream: false });
   const baseUrl = (provider.baseUrl || "https://api.openai.com/v1").replace(/\/+$/, "");
   const url = baseUrl + "/chat/completions";
 
-  const headers = {
-    "Content-Type": "application/json",
-    "Authorization": "Bearer " + (provider.apiKey || ""),
-  };
+  const hooks2 = getHooks(provider);
+  const extraHeaders2 = hooks2 && hooks2.getHeaders ? hooks2.getHeaders(provider) : {};
+
+  const headers = Object.assign(
+    {
+      "Content-Type": "application/json",
+      Authorization: "Bearer " + (provider.apiKey || ""),
+    },
+    extraHeaders2,
+  );
 
   const res = await request(url, {
     method: "POST",
@@ -543,10 +465,11 @@ async function callUpstream(upstreamPayload, provider, traceSession) {
   });
 
   const body = await res.body.text();
-  if (traceSession) traceSession.logRawLine(body);
   if (res.statusCode !== 200) {
     let msg = "Upstream returned HTTP " + res.statusCode;
-    try { msg = JSON.parse(body).error.message || msg; } catch {}
+    try {
+      msg = JSON.parse(body).error.message || msg;
+    } catch {}
     const err = new Error(msg);
     err.statusCode = res.statusCode;
     throw err;
@@ -567,10 +490,8 @@ async function callUpstream(upstreamPayload, provider, traceSession) {
   }
 
   if (message) {
-    // reasoning_content field (DeepSeek, o-series, Kimi)
     result.reasoning = message.reasoning_content || "";
 
-    // Strip inline thinking tags from content and promote to reasoning
     const extracted = extractThinkingTags(message.content || "");
     result.text = extracted.text;
     if (extracted.reasoning) {
@@ -584,34 +505,37 @@ async function callUpstream(upstreamPayload, provider, traceSession) {
         arguments: tc.function.arguments || "{}",
       }));
     }
-    // Fallback: older single function_call format
     if (result.toolCalls.length === 0 && message.function_call) {
-      result.toolCalls = [{
-        id: message.function_call.id || "call_0",
-        name: message.function_call.name || "",
-        arguments: message.function_call.arguments || "{}",
-      }];
+      result.toolCalls = [
+        {
+          id: message.function_call.id || "call_0",
+          name: message.function_call.name || "",
+          arguments: message.function_call.arguments || "{}",
+        },
+      ];
     }
   }
 
   return result;
 }
 
-/**
- * Strip inline <thinking>, <think>, <thought>, <reasoning> tags from text
- * and return the extracted reasoning separately.  Used in the non-streaming
- * path where the full response text is available.
- */
-function extractThinkingTags(text) {
-  const reasoning = [];
-  const cleaned = text.replace(
-    /<\s*(think(?:ing)?|thought|reasoning)\s*>([\s\S]*?)<\/\s*\1\s*>/gi,
-    function (_match, _tag, inner) {
-      if (inner.trim()) reasoning.push(inner.trim());
-      return "";
+function convertToolChoice(toolChoice) {
+  if (!toolChoice) return undefined;
+  if (typeof toolChoice === "string") {
+    return toolChoice;
+  }
+  if (toolChoice.type === "function") {
+    const name = toolChoice.function && toolChoice.function.name;
+    return name ? { type: "function", function: { name } } : "auto";
+  }
+  if (toolChoice.type === "allowed_tools") {
+    const tools = Array.isArray(toolChoice.tools) && toolChoice.tools.length > 0 ? toolChoice.tools : [];
+    if (tools.length > 0) {
+      return { type: "function", function: { name: tools[0] } };
     }
-  );
-  return { text: cleaned.trim(), reasoning: reasoning.join("\n\n") };
+    return "auto";
+  }
+  return "auto";
 }
 
 module.exports = {

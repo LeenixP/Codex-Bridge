@@ -8,6 +8,7 @@ const path = require("node:path");
 const CODEX_CONFIG_DIR = path.join(os.homedir(), ".codex");
 const CODEX_CONFIG_FILE = path.join(CODEX_CONFIG_DIR, "config.toml");
 const CODEX_AUTH_FILE = path.join(CODEX_CONFIG_DIR, "auth.json");
+const CODEX_MODELS_CACHE_FILE = path.join(CODEX_CONFIG_DIR, "models_cache.json");
 const CODEX_PROXY_AUTH_KEY = "codex-switch-local";
 const CATALOG_TIMEOUT_MS = parseInt(process.env.CODEX_CATALOG_TIMEOUT_MS || "15000", 10);
 const BASE_MODELS = ["gpt-5.5", "gpt-5.4", "gpt-5.2"];
@@ -16,11 +17,43 @@ function getCodexConfigDir() {
   return CODEX_CONFIG_DIR;
 }
 
+function tomlEscape(str) {
+  if (!str) return "";
+  return str
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, "\\n")
+    .replace(/\r/g, "\\r");
+}
+
+function atomicWriteSync(filePath, content) {
+  // backup original if it exists
+  if (fs.existsSync(filePath)) {
+    const backupPath = filePath + ".backup." + Date.now();
+    fs.copyFileSync(filePath, backupPath);
+    // keep at most 5 recent backups
+    const dir = path.dirname(filePath);
+    const base = path.basename(filePath);
+    const pattern = new RegExp("^" + base.replace(/\./g, "\\.") + "\\.backup\\.\\d+$");
+    const backups = fs.readdirSync(dir)
+      .filter(function (f) { return pattern.test(f); })
+      .sort()
+      .reverse();
+    for (var i = 5; i < backups.length; i++) {
+      fs.unlinkSync(path.join(dir, backups[i]));
+    }
+  }
+  // write to temp file, then atomic rename
+  var tmpPath = filePath + ".tmp." + Date.now();
+  fs.writeFileSync(tmpPath, content, "utf8");
+  fs.renameSync(tmpPath, filePath);
+}
+
 function findCodexCommand() {
-  const names = process.platform === "win32"
-    ? ["codex.exe", "codex.cmd", "codex.bat", "codex"]
-    : ["codex"];
-  const dirs = String(process.env.PATH || "").split(path.delimiter).filter(Boolean);
+  const names = process.platform === "win32" ? ["codex.exe", "codex.cmd", "codex.bat", "codex"] : ["codex"];
+  const dirs = String(process.env.PATH || "")
+    .split(path.delimiter)
+    .filter(Boolean);
 
   if (process.platform === "win32") {
     const localAppData = process.env.LOCALAPPDATA;
@@ -61,9 +94,10 @@ function sleep(ms) {
 async function readNativeCatalog(retries = 2) {
   const command = findCodexCommand();
   const args = ["debug", "models", "--bundled"];
-  const invocation = process.platform === "win32" && /\.(?:cmd|bat)$/i.test(command)
-    ? { cmd: process.env.ComSpec || "cmd.exe", args: ["/d", "/c", "call", command, ...args] }
-    : { cmd: command, args };
+  const invocation =
+    process.platform === "win32" && /\.(?:cmd|bat)$/i.test(command)
+      ? { cmd: process.env.ComSpec || "cmd.exe", args: ["/d", "/c", "call", command, ...args] }
+      : { cmd: command, args };
 
   let lastError = null;
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -88,11 +122,29 @@ async function readNativeCatalog(retries = 2) {
       }
     }
   }
-  const code = lastError && lastError.code || "UNKNOWN";
-  const msg = lastError && lastError.killed
-    ? "Codex CLI timed out after " + CATALOG_TIMEOUT_MS + "ms (" + (retries + 1) + " attempt(s)). Try setting CODEX_CATALOG_TIMEOUT_MS env var."
-    : "Failed to run codex CLI (exit code: " + code + "): " + (lastError && lastError.message || "");
-  throw new Error(msg);
+  const code = (lastError && lastError.code) || "UNKNOWN";
+  const msg =
+    lastError && lastError.killed
+      ? "Codex CLI timed out after " +
+        CATALOG_TIMEOUT_MS +
+        "ms (" +
+        (retries + 1) +
+        " attempt(s)). Try setting CODEX_CATALOG_TIMEOUT_MS env var."
+      : "Failed to run codex CLI (exit code: " + code + "): " + ((lastError && lastError.message) || "");
+  try {
+    return readModelsCacheCatalog();
+  } catch (cacheErr) {
+    throw new Error(msg + " Cache fallback failed: " + cacheErr.message);
+  }
+}
+
+function readModelsCacheCatalog() {
+  const raw = fs.readFileSync(CODEX_MODELS_CACHE_FILE, "utf8");
+  const parsed = JSON.parse(raw.replace(/^\uFEFF/, ""));
+  if (!parsed || !Array.isArray(parsed.models)) {
+    throw new Error("Invalid Codex models_cache.json shape.");
+  }
+  return parsed;
 }
 
 function findBaseModel(catalog) {
@@ -108,6 +160,7 @@ function buildProxyModelEntry(baseModel, provider, proxyPort) {
   const entry = JSON.parse(JSON.stringify(baseModel));
   entry.slug = "codex-switch-" + sanitizeSlug(provider.name);
   entry.name = provider.name + " (via Codex-Switch)";
+  entry.display_name = entry.name;
   entry.description = provider.name + " served through Codex-Switch local proxy.";
 
   if (entry.api) {
@@ -123,6 +176,9 @@ function buildProxyModelEntry(baseModel, provider, proxyPort) {
   if (entry.available_plans) {
     entry.available_plans = ["free", "plus", "pro", "team", "enterprise", "business"];
   }
+
+  entry.supported_in_api = true;
+  entry.visibility = entry.visibility || "list";
 
   return entry;
 }
@@ -193,9 +249,13 @@ async function injectCodexConfig(proxyPort, providers) {
 
   // Replace existing top-level model_provider / model lines in-place so
   // Codex's TOML parser never sees duplicate keys (first-wins semantics).
+  // If the lines don't exist (clean config), prepend them at the top.
   existing = existing
-    .replace(/^model_provider\s*=\s*.*$/m, 'model_provider = "' + providerId + '"')
-    .replace(/^model\s*=\s*.*$/m, 'model = "' + modelName + '"');
+    .replace(/^model_provider\s*=\s*.*$\n?/m, '')
+    .replace(/^model\s*=\s*.*$\n?/m, '');
+
+  const topLevelBlock = 'model_provider = "' + tomlEscape(providerId) + '"\nmodel = "' + tomlEscape(modelName) + '"\n';
+  existing = topLevelBlock + existing.replace(/^\n+/, '');
 
   // Detect and comment out preferred_auth_method = "apikey" — it conflicts
   // with the hybrid OAuth + proxy mode and causes Codex to hang on startup.
@@ -203,50 +263,49 @@ async function injectCodexConfig(proxyPort, providers) {
   if (authMethodFixed) {
     existing = existing.replace(
       /^preferred_auth_method\s*=\s*"apikey"/m,
-      "# preferred_auth_method = \"apikey\"  # Codex-Switch: commented out — incompatible with hybrid OAuth mode"
+      '# preferred_auth_method = "apikey"  # Codex-Switch: commented out — incompatible with hybrid OAuth mode',
     );
   }
 
-  // Collect all known Codex model slugs so we can alias them to the
-  // active provider model.  This prevents Codex background tasks
-  // (title generation, etc.) from sending native model names like
-  // gpt-5.4-mini directly to the upstream provider.
-  let nativeModelSlugs = [];
+  // Collect all known Codex model slugs for reference, but do NOT alias them
+  // to the active provider model.  Only codex-switch-* prefixed models are
+  // aliased here, so native GPT/o-series models remain available through the
+  // original OpenAI provider when the user switches model_provider back.
   try {
     const nativeCatalog = await readNativeCatalog();
     if (nativeCatalog && Array.isArray(nativeCatalog.models)) {
-      nativeModelSlugs = nativeCatalog.models.map(function (m) { return m.slug; });
+      nativeModelSlugs = nativeCatalog.models.map(function (m) {
+        return m.slug;
+      });
     }
   } catch {}
 
-  // Add our own codex-switch prefixed models
-  const allAliasSlugs = [modelName].concat(nativeModelSlugs.filter(function (s) { return s !== modelName; }));
-
-  const aliasLines = allAliasSlugs.map(function (slug) {
-    return '"' + slug + '" = "' + (activeProvider.model || modelName) + '"';
-  });
+  // Only alias the codex-switch prefixed model — native models stay untouched
+  const aliasLines = [
+    '"' + tomlEscape(modelName) + '" = "' + tomlEscape(activeProvider.model || modelName) + '"',
+  ];
 
   // Build managed section — only provider definition + aliases (no top-level dupes)
   const section = [
     marker,
     "# Codex-Switch proxy configuration",
-    "# original_provider = \"" + origProvider + "\"",
-    "# original_model = \"" + origModel + "\"",
+    '# original_provider = "' + tomlEscape(origProvider) + '"',
+    '# original_model = "' + tomlEscape(origModel) + '"',
     "",
-    "[model_providers." + providerId + "]",
-    'name = "' + activeProvider.name + ' (Codex-Switch)"',
+    "[model_providers." + tomlEscape(providerId) + "]",
+    'name = "' + tomlEscape(activeProvider.name) + ' (Codex-Switch)"',
     'wire_api = "responses"',
     "requires_openai_auth = true",
     'api_key = "' + CODEX_PROXY_AUTH_KEY + '"',
     'base_url = "http://127.0.0.1:' + proxyPort + '/v1"',
     "",
     "[model_providers." + providerId + ".model_aliases]",
-  ].concat(aliasLines).concat([
-    endMarker,
-    "",
-  ]).join("\n");
+  ]
+    .concat(aliasLines)
+    .concat([endMarker, ""])
+    .join("\n");
 
-  fs.writeFileSync(CODEX_CONFIG_FILE, existing.trimEnd() + "\n\n" + section, "utf8");
+  atomicWriteSync(CODEX_CONFIG_FILE, existing.trimEnd() + "\n\n" + section);
 
   // Clean up dummy key left by older Codex-Switch versions.
   // Only removes the OPENAI_API_KEY field — preserves OAuth tokens.
@@ -295,13 +354,13 @@ function removeCodexConfig() {
       content = content.slice(0, startIdx) + content.slice(endIdx + endMarker.length + 1);
 
       if (origProvider) {
-        content = content.replace(/^model_provider\s*=\s*.*$/m, 'model_provider = "' + origProvider + '"');
+        content = content.replace(/^model_provider\s*=\s*.*$/m, 'model_provider = "' + tomlEscape(origProvider) + '"');
       }
       if (origModel) {
-        content = content.replace(/^model\s*=\s*.*$/m, 'model = "' + origModel + '"');
+        content = content.replace(/^model\s*=\s*.*$/m, 'model = "' + tomlEscape(origModel) + '"');
       }
 
-      fs.writeFileSync(CODEX_CONFIG_FILE, content.trimEnd() + "\n", "utf8");
+      atomicWriteSync(CODEX_CONFIG_FILE, content.trimEnd() + "\n");
     }
   } catch {}
 

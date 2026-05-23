@@ -34,7 +34,9 @@ function createMockOpenAIChatServer() {
   return new Promise((resolve) => {
     mockServer = http.createServer((req, res) => {
       let body = "";
-      req.on("data", (chunk) => { body += chunk; });
+      req.on("data", (chunk) => {
+        body += chunk;
+      });
       req.on("end", () => {
         const data = JSON.parse(body);
 
@@ -44,7 +46,10 @@ function createMockOpenAIChatServer() {
             { choices: [{ delta: { role: "assistant" }, index: 0 }] },
             { choices: [{ delta: { content: "Hello" }, index: 0 }] },
             { choices: [{ delta: { content: " world" }, index: 0 }] },
-            { choices: [{ delta: {}, index: 0, finish_reason: "stop" }], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } },
+            {
+              choices: [{ delta: {}, index: 0, finish_reason: "stop" }],
+              usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+            },
           ];
           for (const chunk of chunks) {
             res.write("data: " + JSON.stringify(chunk) + "\n\n");
@@ -53,10 +58,12 @@ function createMockOpenAIChatServer() {
           res.end();
         } else {
           res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({
-            choices: [{ message: { role: "assistant", content: "Hello world" }, finish_reason: "stop" }],
-            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
-          }));
+          res.end(
+            JSON.stringify({
+              choices: [{ message: { role: "assistant", content: "Hello world" }, finish_reason: "stop" }],
+              usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+            }),
+          );
         }
       });
     });
@@ -71,7 +78,9 @@ function httpRequest(options, body) {
   return new Promise((resolve, reject) => {
     const req = http.request(options, (res) => {
       let data = "";
-      res.on("data", (chunk) => { data += chunk; });
+      res.on("data", (chunk) => {
+        data += chunk;
+      });
       res.on("end", () => resolve({ status: res.statusCode, headers: res.headers, body: data }));
     });
     req.on("error", reject);
@@ -106,13 +115,16 @@ async function testResponsesSync() {
     input: "Say hello",
     stream: false,
   });
-  const res = await httpRequest({
-    hostname: "127.0.0.1",
-    port: PROXY_PORT,
-    path: "/v1/responses",
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
-  }, body);
+  const res = await httpRequest(
+    {
+      hostname: "127.0.0.1",
+      port: PROXY_PORT,
+      path: "/v1/responses",
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+    },
+    body,
+  );
   const data = JSON.parse(res.body);
   assert(res.status === 200, "Status 200");
   assert(data.object === "response", "object is response");
@@ -131,13 +143,16 @@ async function testResponsesStream() {
     input: "Say hello",
     stream: true,
   });
-  const res = await httpRequest({
-    hostname: "127.0.0.1",
-    port: PROXY_PORT,
-    path: "/v1/responses",
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
-  }, body);
+  const res = await httpRequest(
+    {
+      hostname: "127.0.0.1",
+      port: PROXY_PORT,
+      path: "/v1/responses",
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+    },
+    body,
+  );
   assert(res.status === 200, "Status 200");
   assert(res.headers["content-type"].includes("text/event-stream"), "Content-Type is SSE");
 
@@ -161,13 +176,16 @@ async function testNoProvider() {
   await delay(200);
 
   const body = JSON.stringify({ model: "test", input: "hi", stream: false });
-  const res = await httpRequest({
-    hostname: "127.0.0.1",
-    port: PROXY_PORT,
-    path: "/v1/responses",
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
-  }, body);
+  const res = await httpRequest(
+    {
+      hostname: "127.0.0.1",
+      port: PROXY_PORT,
+      path: "/v1/responses",
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+    },
+    body,
+  );
   assert(res.status === 503, "Status 503 when no provider");
 }
 
@@ -197,14 +215,16 @@ async function main() {
   await createMockOpenAIChatServer();
   console.log("[Setup] Mock OpenAI Chat server on port " + MOCK_PORT);
 
-  const providers = [{
-    name: "Test Provider",
-    protocol: "openai-chat",
-    baseUrl: "http://127.0.0.1:" + MOCK_PORT + "/v1",
-    apiKey: "test-key",
-    model: "gpt-4o",
-    active: true,
-  }];
+  const providers = [
+    {
+      name: "Test Provider",
+      protocol: "openai-chat",
+      baseUrl: "http://127.0.0.1:" + MOCK_PORT + "/v1",
+      apiKey: "test-key",
+      model: "gpt-4o",
+      active: true,
+    },
+  ];
 
   await createProxyServer({ port: PROXY_PORT, host: "127.0.0.1" }, providers);
   await delay(300);

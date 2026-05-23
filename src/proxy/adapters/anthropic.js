@@ -5,6 +5,8 @@ const log = require("../../shared/logger");
 const { parseSSEStream } = require("../../shared/stream");
 const reasoningCache = require("../core/reasoning-cache");
 const { stripCodexFields } = require("../../shared/request-cleaner");
+const { ThinkingTagStreamParser, extractThinkingTags } = require("../../shared/thinking-parser");
+const { getHooks } = require("../presets");
 const {
   reasoningDeltaEvent,
   textDeltaEvent,
@@ -12,119 +14,9 @@ const {
   toolCallArgsDeltaEvent,
   toolCallEndEvent,
   responseCompletedEvent,
+  responseIncompleteEvent,
   errorEvent,
 } = require("../core/events");
-
-// ---------------------------------------------------------------------------
-// Thinking tag stream parser (shared with openai-chat adapter)
-// ---------------------------------------------------------------------------
-const THINKING_OPEN_RE = /<\s*(think(?:ing)?|thought|reasoning)\s*>/i;
-
-function normalizeTagName(name) {
-  const n = name.toLowerCase();
-  if (n === "think") return "thinking";
-  if (n === "thought") return "reasoning";
-  return n;
-}
-
-function closeTagVariants(normalized) {
-  if (normalized === "thinking") return ["</thinking>", "</think>"];
-  if (normalized === "reasoning") return ["</reasoning>", "</thought>"];
-  return ["</" + normalized + ">"];
-}
-
-function findCloseTag(buf, normalized) {
-  const variants = closeTagVariants(normalized);
-  let best = null;
-  for (const v of variants) {
-    const idx = buf.toLowerCase().indexOf(v.toLowerCase());
-    if (idx >= 0 && (best === null || idx < best.index)) {
-      best = { index: idx, length: v.length };
-    }
-  }
-  return best;
-}
-
-function maybePartialCloseTag(buf, normalized) {
-  if (buf.length === 0) return 0;
-  const variants = closeTagVariants(normalized);
-  const lower = buf.toLowerCase();
-  for (const v of variants) {
-    const lowerV = v.toLowerCase();
-    for (let keep = 1; keep <= Math.min(buf.length, lowerV.length - 1); keep++) {
-      const suffix = lower.slice(-keep);
-      if (lowerV.startsWith(suffix)) return keep;
-    }
-  }
-  return 0;
-}
-
-class ThinkingTagStreamParser {
-  constructor() {
-    this._buf = "";
-    this._inTag = false;
-    this._tagName = "";
-  }
-
-  feed(chunk) {
-    this._buf += chunk;
-    let reasoning = "";
-    let text = "";
-
-    while (this._buf.length > 0) {
-      if (!this._inTag) {
-        const m = this._buf.match(THINKING_OPEN_RE);
-        if (!m) {
-          const lt = this._buf.lastIndexOf("<");
-          if (lt >= 0 && this._buf.length - lt <= 20) {
-            text += this._buf.slice(0, lt);
-            this._buf = this._buf.slice(lt);
-            break;
-          }
-          text += this._buf;
-          this._buf = "";
-          break;
-        }
-        text += this._buf.slice(0, m.index);
-        this._buf = this._buf.slice(m.index + m[0].length);
-        this._inTag = true;
-        this._tagName = normalizeTagName(m[1]);
-      } else {
-        const found = findCloseTag(this._buf, this._tagName);
-        if (!found) {
-          const keep = maybePartialCloseTag(this._buf, this._tagName);
-          if (keep > 0) {
-            reasoning += this._buf.slice(0, -keep);
-            this._buf = this._buf.slice(-keep);
-            break;
-          }
-          reasoning += this._buf;
-          this._buf = "";
-          break;
-        }
-        reasoning += this._buf.slice(0, found.index);
-        this._buf = this._buf.slice(found.index + found.length);
-        this._inTag = false;
-        this._tagName = "";
-      }
-    }
-
-    return { reasoning, text };
-  }
-
-  flush() {
-    if (this._inTag) {
-      const result = { reasoning: "", text: "<" + this._tagName + ">" + this._buf };
-      this._buf = "";
-      this._inTag = false;
-      this._tagName = "";
-      return result;
-    }
-    const result = { reasoning: "", text: this._buf };
-    this._buf = "";
-    return result;
-  }
-}
 
 const EFFORT_TO_BUDGET = {
   low: 2000,
@@ -267,7 +159,7 @@ function convertInputToMessages(requestBody, provider) {
           messages.push(converted);
         }
       } else if (item.type === "reasoning") {
-        const summaries = Array.isArray(item.summary) ? item.summary : (item.summary ? [item.summary] : []);
+        const summaries = Array.isArray(item.summary) ? item.summary : item.summary ? [item.summary] : [];
         for (const s of summaries) {
           if (!s || s.type !== "summary_text" || !s.text) continue;
           const sig = reasoningCache.get(s.text);
@@ -319,6 +211,82 @@ function convertInputToMessages(requestBody, provider) {
         } else {
           messages.push({ role: "user", content: [toolResult] });
         }
+      } else if (item.type === "web_search_call") {
+        const toolUse = {
+          type: "tool_use",
+          id: item.call_id || "ws_" + Math.random().toString(36).slice(2, 10),
+          name: "web_search",
+          input: item.action || {},
+        };
+        const last = messages[messages.length - 1];
+        if (last && last.role === "assistant") {
+          if (typeof last.content === "string") {
+            last.content = [{ type: "text", text: last.content }, toolUse];
+          } else if (Array.isArray(last.content)) {
+            last.content.push(toolUse);
+          } else {
+            last.content = [toolUse];
+          }
+        } else {
+          messages.push({ role: "assistant", content: [toolUse] });
+        }
+      } else if (item.type === "web_search_call_output") {
+        const toolResult = {
+          type: "tool_result",
+          tool_use_id: item.call_id,
+          content: typeof item.output === "string" ? item.output : JSON.stringify(item.output || ""),
+        };
+        const last = messages[messages.length - 1];
+        if (last && last.role === "user") {
+          if (typeof last.content === "string") {
+            last.content = [{ type: "text", text: last.content }, toolResult];
+          } else if (Array.isArray(last.content)) {
+            last.content.push(toolResult);
+          } else {
+            last.content = [toolResult];
+          }
+        } else {
+          messages.push({ role: "user", content: [toolResult] });
+        }
+      } else if (item.type === "custom_tool_call") {
+        const toolUse = {
+          type: "tool_use",
+          id: item.call_id || "ct_" + Math.random().toString(36).slice(2, 10),
+          name: item.name || "custom_tool",
+          input: item.input || {},
+        };
+        const last = messages[messages.length - 1];
+        if (last && last.role === "assistant") {
+          if (typeof last.content === "string") {
+            last.content = [{ type: "text", text: last.content }, toolUse];
+          } else if (Array.isArray(last.content)) {
+            last.content.push(toolUse);
+          } else {
+            last.content = [toolUse];
+          }
+        } else {
+          messages.push({ role: "assistant", content: [toolUse] });
+        }
+      } else if (item.type === "custom_tool_call_output") {
+        const toolResult = {
+          type: "tool_result",
+          tool_use_id: item.call_id,
+          content: typeof item.output === "string" ? item.output : JSON.stringify(item.output || ""),
+        };
+        const last = messages[messages.length - 1];
+        if (last && last.role === "user") {
+          if (typeof last.content === "string") {
+            last.content = [{ type: "text", text: last.content }, toolResult];
+          } else if (Array.isArray(last.content)) {
+            last.content.push(toolResult);
+          } else {
+            last.content = [toolResult];
+          }
+        } else {
+          messages.push({ role: "user", content: [toolResult] });
+        }
+      } else if (item.type === "compaction" || item.type === "compaction_trigger") {
+        continue;
       }
     }
 
@@ -347,8 +315,12 @@ function prependThinkingBlocks(msg, blocks) {
     // Dedup: skip blocks already present (by text match)
     const existingTexts = new Set(
       msg.content
-        .filter(function (c) { return c.type === "thinking"; })
-        .map(function (c) { return c.thinking; })
+        .filter(function (c) {
+          return c.type === "thinking";
+        })
+        .map(function (c) {
+          return c.thinking;
+        }),
     );
     for (let b = blocks.length - 1; b >= 0; b--) {
       if (!existingTexts.has(blocks[b].thinking)) {
@@ -361,7 +333,7 @@ function prependThinkingBlocks(msg, blocks) {
 }
 
 function convertMessageItem(item, provider) {
-  const role = item.role === "assistant" ? "assistant" : (item.role === "system" ? "system" : "user");
+  const role = item.role === "assistant" ? "assistant" : item.role === "system" ? "system" : "user";
   if (typeof item.content === "string") {
     return { role, content: item.content };
   }
@@ -391,35 +363,60 @@ function convertMessageItem(item, provider) {
 }
 
 function convertTools(tools) {
-  return tools
-    .filter((t) => t && (t.type === "function" || t.type === "custom"))
-    .map((t) => ({
-      name: t.name,
-      description: t.description || "",
-      input_schema: t.parameters || t.input_schema || { type: "object", properties: {} },
-    }));
+  return tools.flatMap((t) => {
+    if (!t) return [];
+    if (t.type === "function" || t.type === "custom") {
+      return [{
+        name: t.name,
+        description: t.description || "",
+        input_schema: t.parameters || t.input_schema || { type: "object", properties: {} },
+      }];
+    }
+    if (t.type === "namespace" && Array.isArray(t.tools)) {
+      return t.tools
+        .filter((sub) => sub && (sub.type === "function" || sub.type === "custom"))
+        .map((sub) => ({
+          name: t.name + "_" + sub.name,
+          description: sub.description || "",
+          input_schema: sub.parameters || sub.input_schema || { type: "object", properties: {} },
+        }));
+    }
+    return [];
+  });
 }
 
 function convertToolChoice(toolChoice) {
   if (!toolChoice) return undefined;
   if (typeof toolChoice === "string") {
     switch (toolChoice) {
-      case "auto": return { type: "auto" };
-      case "required": return { type: "any" };
-      case "none": return undefined;
-      default: return { type: "tool", name: toolChoice };
+      case "auto":
+        return { type: "auto" };
+      case "required":
+        return { type: "any" };
+      case "none":
+        return undefined;
+      default:
+        return { type: "tool", name: toolChoice };
     }
   }
   if (toolChoice.type === "function") {
-    return { type: "tool", name: toolChoice.function && toolChoice.function.name };
+    const name = toolChoice.function && toolChoice.function.name;
+    return name ? { type: "tool", name } : undefined;
   }
-  return { type: "auto" };
+  if (toolChoice.type === "allowed_tools") {
+    return { type: "any" };
+  }
+  return undefined;
 }
 
 function safeParseJson(value) {
   if (!value) return {};
   if (typeof value === "object") return value;
-  try { return JSON.parse(value); } catch { return {}; }
+  try {
+    return JSON.parse(value);
+  } catch {
+    return {};
+  }
 }
 
 /**
@@ -447,20 +444,23 @@ async function streamUpstream(upstreamPayload, provider, emit, traceSession) {
   const baseUrl = (provider.baseUrl || "https://api.anthropic.com").replace(/\/+$/, "");
   const url = baseUrl + "/v1/messages";
 
-  const headers = {
-    "Content-Type": "application/json",
-    "x-api-key": provider.apiKey || "",
-    ...(upstreamPayload._betas && upstreamPayload._betas.length > 0
-      ? { "anthropic-beta": upstreamPayload._betas.join(",") }
-      : {}),
-    "anthropic-version": "2023-06-01",
-  };
+  const hooksS = getHooks(provider);
+  const extraHdrS = hooksS && hooksS.getHeaders ? hooksS.getHeaders(provider) : {};
+
+  const headers = Object.assign(
+    {
+      "Content-Type": "application/json",
+      "x-api-key": provider.apiKey || "",
+      "anthropic-version": "2023-06-01",
+    },
+    ...(upstreamPayload._betas && upstreamPayload._betas.length > 0 ? [{ "anthropic-beta": upstreamPayload._betas.join(",") }] : []),
+    extraHdrS,
+  );
 
   const body = Object.assign({}, upstreamPayload);
   delete body.system;
-  const requestPayload = upstreamPayload.system
-    ? Object.assign({}, body, { system: upstreamPayload.system })
-    : body;
+  const requestPayload = upstreamPayload.system ? Object.assign({}, body, { system: upstreamPayload.system }) : body;
+  delete requestPayload._betas;
 
   const res = await request(url, {
     method: "POST",
@@ -488,6 +488,7 @@ async function streamUpstream(upstreamPayload, provider, emit, traceSession) {
   }
 
   let usage = null;
+  let stopReason = null;
   const toolCalls = {};
   let _currentBlockType = null;
   let currentBlockIndex = -1;
@@ -499,7 +500,12 @@ async function streamUpstream(upstreamPayload, provider, emit, traceSession) {
   for await (const chunk of parseSSEStream(res.body)) {
     if (traceSession) traceSession.logRawLine(chunk);
     let data;
-    try { data = JSON.parse(chunk); } catch { log.warn("[anthropic] unparseable SSE chunk"); continue; }
+    try {
+      data = JSON.parse(chunk);
+    } catch {
+      log.warn("[anthropic] unparseable SSE chunk");
+      continue;
+    }
 
     const eventType = data.type;
 
@@ -516,6 +522,11 @@ async function streamUpstream(upstreamPayload, provider, emit, traceSession) {
         if (usage) {
           usage.output_tokens = outTokens;
           usage.total_tokens = usage.input_tokens + outTokens;
+        }
+      }
+      if (data.delta && data.delta.stop_reason) {
+        if (data.delta.stop_reason === "max_tokens" || data.delta.stop_reason === "tool_use") {
+          stopReason = data.delta.stop_reason;
         }
       }
       continue;
@@ -543,7 +554,9 @@ async function streamUpstream(upstreamPayload, provider, emit, traceSession) {
 
       if (delta.type === "thinking_delta") {
         thinkingText += delta.thinking || "";
-        emit(reasoningDeltaEvent(delta.thinking || ""));
+        if (delta.thinking) {
+          emit(reasoningDeltaEvent(delta.thinking));
+        }
       } else if (delta.type === "text_delta") {
         const parsed = thinkParser.feed(delta.text || "");
         if (parsed.reasoning) emit(reasoningDeltaEvent(parsed.reasoning));
@@ -590,7 +603,11 @@ async function streamUpstream(upstreamPayload, provider, emit, traceSession) {
   if (flushed.reasoning) emit(reasoningDeltaEvent(flushed.reasoning));
   if (flushed.text) emit(textDeltaEvent(flushed.text));
 
-  emit(responseCompletedEvent(usage));
+  if (stopReason === "max_tokens") {
+    emit(responseIncompleteEvent(stopReason));
+  } else {
+    emit(responseCompletedEvent(usage));
+  }
 }
 
 /**
@@ -614,18 +631,22 @@ async function callUpstream(upstreamPayload, provider, traceSession) {
   // thinking config is preserved — Anthropic supports it in non-streaming mode
   // unlike the _betas internal flag which must be sent via header
   const baseUrl = (provider.baseUrl || "https://api.anthropic.com").replace(/\/+$/, "");
-  const url = baseUrl + "/v1/messages";
+  const url2 = baseUrl + "/v1/messages";
 
-  const headers = {
-    "Content-Type": "application/json",
-    "x-api-key": provider.apiKey || "",
-    ...(betas && betas.length > 0
-      ? { "anthropic-beta": betas.join(",") }
-      : {}),
-    "anthropic-version": "2023-06-01",
-  };
+  const hooksC = getHooks(provider);
+  const extraHdrC = hooksC && hooksC.getHeaders ? hooksC.getHeaders(provider) : {};
 
-  const res = await request(url, {
+  const headers = Object.assign(
+    {
+      "Content-Type": "application/json",
+      "x-api-key": provider.apiKey || "",
+      "anthropic-version": "2023-06-01",
+    },
+    ...(betas && betas.length > 0 ? [{ "anthropic-beta": betas.join(",") }] : []),
+    extraHdrC,
+  );
+
+  const res = await request(url2, {
     method: "POST",
     headers,
     body: JSON.stringify(payload),
@@ -637,7 +658,9 @@ async function callUpstream(upstreamPayload, provider, traceSession) {
   if (traceSession) traceSession.logRawLine(responseBody);
   if (res.statusCode !== 200) {
     let msg = "Upstream returned HTTP " + res.statusCode;
-    try { msg = JSON.parse(responseBody).error.message || msg; } catch {}
+    try {
+      msg = JSON.parse(responseBody).error.message || msg;
+    } catch {}
     dumpRequestThinking(payload, provider);
     const err = new Error(msg);
     err.statusCode = res.statusCode;
@@ -683,18 +706,6 @@ async function callUpstream(upstreamPayload, provider, traceSession) {
   return result;
 }
 
-function extractThinkingTags(text) {
-  const reasoning = [];
-  const cleaned = text.replace(
-    /<\s*(think(?:ing)?|thought|reasoning)\s*>([\s\S]*?)<\/\s*\1\s*>/gi,
-    function (_match, _tag, inner) {
-      if (inner.trim()) reasoning.push(inner.trim());
-      return "";
-    }
-  );
-  return { text: cleaned.trim(), reasoning: reasoning.join("\n\n") };
-}
-
 function dumpRequestThinking(payload, _provider) {
   if (!payload || !Array.isArray(payload.messages)) return;
   const lines = [];
@@ -710,10 +721,12 @@ function dumpRequestThinking(payload, _provider) {
       lines.push("  msg[" + m + "] assistant <no content>");
       continue;
     }
-    const hasThinking = content.some(function (b) { return b.type === "thinking"; });
+    const hasThinking = content.some(function (b) {
+      return b.type === "thinking";
+    });
     const blocks = content.map(function (b) {
       if (b.type === "thinking") {
-        const txt = (b.thinking || "");
+        const txt = b.thinking || "";
         const prefix = txt.length > 50 ? txt.slice(0, 50) + "..." : txt;
         return "thinking(len=" + txt.length + ",sig=" + (b.signature ? "yes" : "NO") + ") " + prefix;
       }

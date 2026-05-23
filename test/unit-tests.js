@@ -48,9 +48,16 @@ function makeMockResponse() {
     ended: false,
     writableEnded: false,
     _head: null,
-    writeHead(code, headers) { this._head = { code, headers }; },
-    write(data) { this.written.push(data); },
-    end() { this.ended = true; this.writableEnded = true; },
+    writeHead(code, headers) {
+      this._head = { code, headers };
+    },
+    write(data) {
+      this.written.push(data);
+    },
+    end() {
+      this.ended = true;
+      this.writableEnded = true;
+    },
     socket: { setNoDelay() {} },
     flushHeaders() {},
   };
@@ -71,7 +78,11 @@ function parseSseResponse(res) {
       if (line.startsWith("data: ")) data = line.slice(6);
     }
     if (ev && data) {
-      try { messages.push({ event: ev, data: JSON.parse(data) }); } catch { /* skip */ }
+      try {
+        messages.push({ event: ev, data: JSON.parse(data) });
+      } catch {
+        /* skip */
+      }
     }
   }
   return messages;
@@ -83,11 +94,7 @@ function parseSseResponse(res) {
 
 function testOpenAIChatStringInput() {
   console.log("\n[Test] openai-chat: string input -> single user message");
-  const payload = openai.buildUpstreamRequest(
-    { model: "gpt-4o", input: "Hello world" },
-    { model: "gpt-4o" },
-    {}
-  );
+  const payload = openai.buildUpstreamRequest({ model: "gpt-4o", input: "Hello world" }, { model: "gpt-4o" }, {});
   assert(payload.messages.length === 1, "one message");
   assert(payload.messages[0].role === "user", "role is user");
   assert(payload.messages[0].content === "Hello world", "content matches");
@@ -105,7 +112,7 @@ function testOpenAIChatArrayInputRoleBased() {
       ],
     },
     { model: "gpt-4o" },
-    {}
+    {},
   );
   assert(payload.messages.length === 3, "three messages");
   assert(payload.messages[0].role === "user", "first role is user");
@@ -120,12 +127,10 @@ function testOpenAIChatArrayInputMessageType() {
   const payload = openai.buildUpstreamRequest(
     {
       model: "gpt-4o",
-      input: [
-        { type: "message", role: "user", content: "Hello from message type" },
-      ],
+      input: [{ type: "message", role: "user", content: "Hello from message type" }],
     },
     { model: "gpt-4o" },
-    {}
+    {},
   );
   assert(payload.messages.length === 1, "one message");
   assert(payload.messages[0].role === "user", "role is user");
@@ -141,7 +146,7 @@ function testOpenAIChatInstructions() {
       instructions: "You are a helpful assistant.",
     },
     { model: "gpt-4o" },
-    {}
+    {},
   );
   assert(payload.messages.length === 2, "two messages (system + user)");
   assert(payload.messages[0].role === "system", "first message is system");
@@ -151,42 +156,26 @@ function testOpenAIChatInstructions() {
 
 function testOpenAIChatMaxOutputTokens() {
   console.log("\n[Test] openai-chat: max_output_tokens -> max_completion_tokens");
-  const payload = openai.buildUpstreamRequest(
-    { model: "gpt-4o", input: "Hi", max_output_tokens: 4096 },
-    { model: "gpt-4o" },
-    {}
-  );
+  const payload = openai.buildUpstreamRequest({ model: "gpt-4o", input: "Hi", max_output_tokens: 4096 }, { model: "gpt-4o" }, {});
   assert(payload.max_completion_tokens === 4096, "max_completion_tokens set");
 }
 
 function testOpenAIChatTemperatureTopP() {
   console.log("\n[Test] openai-chat: temperature and top_p passthrough");
-  const payload = openai.buildUpstreamRequest(
-    { model: "gpt-4o", input: "Hi", temperature: 0.7, top_p: 0.9 },
-    { model: "gpt-4o" },
-    {}
-  );
+  const payload = openai.buildUpstreamRequest({ model: "gpt-4o", input: "Hi", temperature: 0.7, top_p: 0.9 }, { model: "gpt-4o" }, {});
   assert(payload.temperature === 0.7, "temperature passthrough");
   assert(payload.top_p === 0.9, "top_p passthrough");
 }
 
 function testOpenAIChatTemperatureZero() {
   console.log("\n[Test] openai-chat: temperature=0 passes through");
-  const payload = openai.buildUpstreamRequest(
-    { model: "gpt-4o", input: "Hi", temperature: 0 },
-    { model: "gpt-4o" },
-    {}
-  );
+  const payload = openai.buildUpstreamRequest({ model: "gpt-4o", input: "Hi", temperature: 0 }, { model: "gpt-4o" }, {});
   assert(payload.temperature === 0, "temperature=0 preserved (not skipped)");
 }
 
 function testOpenAIChatReasoningEffort() {
   console.log("\n[Test] openai-chat: reasoning.effort -> reasoning_effort");
-  const payload = openai.buildUpstreamRequest(
-    { model: "o1", input: "Solve this", reasoning: { effort: "high" } },
-    { model: "o1" },
-    {}
-  );
+  const payload = openai.buildUpstreamRequest({ model: "o1", input: "Solve this", reasoning: { effort: "high" } }, { model: "o1" }, {});
   assert(payload.reasoning_effort === "high", "reasoning_effort set");
 }
 
@@ -199,7 +188,7 @@ function testOpenAIChatJsonObjectFormat() {
       text: { format: { type: "json_object" } },
     },
     { model: "gpt-4o" },
-    {}
+    {},
   );
   assert(payload.response_format !== undefined, "has response_format");
   assert(payload.response_format.type === "json_object", "type is json_object");
@@ -215,7 +204,7 @@ function testOpenAIChatJsonSchemaFormat() {
       text: { format: { type: "json_schema", name: "person", strict: true, schema } },
     },
     { model: "gpt-4o" },
-    {}
+    {},
   );
   assert(payload.response_format.type === "json_schema", "type is json_schema");
   assert(payload.response_format.json_schema.name === "person", "name preserved");
@@ -239,7 +228,7 @@ function testOpenAIChatTools() {
       ],
     },
     { model: "gpt-4o" },
-    {}
+    {},
   );
   assert(Array.isArray(payload.tools) && payload.tools.length === 1, "has one tool");
   assert(payload.tools[0].type === "function", "tool type is function");
@@ -260,7 +249,7 @@ function testOpenAIChatToolsFiltersNonFunction() {
       ],
     },
     { model: "gpt-4o" },
-    {}
+    {},
   );
   assert(payload.tools.length === 1, "only function tools kept");
   assert(payload.tools[0].function.name === "valid", "correct tool kept");
@@ -271,12 +260,10 @@ function testOpenAIChatFunctionCallInput() {
   const payload = openai.buildUpstreamRequest(
     {
       model: "gpt-4o",
-      input: [
-        { type: "function_call", call_id: "call_abc", name: "get_weather", arguments: '{"city":"NYC"}' },
-      ],
+      input: [{ type: "function_call", call_id: "call_abc", name: "get_weather", arguments: '{"city":"NYC"}' }],
     },
     { model: "gpt-4o" },
-    {}
+    {},
   );
   assert(payload.messages.length === 1, "one message");
   const msg = payload.messages[0];
@@ -293,12 +280,10 @@ function testOpenAIChatFunctionCallOutputInput() {
   const payload = openai.buildUpstreamRequest(
     {
       model: "gpt-4o",
-      input: [
-        { type: "function_call_output", call_id: "call_abc", output: "Sunny, 72F" },
-      ],
+      input: [{ type: "function_call_output", call_id: "call_abc", output: "Sunny, 72F" }],
     },
     { model: "gpt-4o" },
-    {}
+    {},
   );
   const msg = payload.messages[0];
   assert(msg.role === "tool", "role is tool");
@@ -311,12 +296,10 @@ function testOpenAIChatFunctionCallOutputObject() {
   const payload = openai.buildUpstreamRequest(
     {
       model: "gpt-4o",
-      input: [
-        { type: "function_call_output", call_id: "call_abc", output: { temp: 72, condition: "sunny" } },
-      ],
+      input: [{ type: "function_call_output", call_id: "call_abc", output: { temp: 72, condition: "sunny" } }],
     },
     { model: "gpt-4o" },
-    {}
+    {},
   );
   const msg = payload.messages[0];
   assert(msg.role === "tool", "role is tool");
@@ -330,20 +313,24 @@ function testOpenAIChatImageUrlNonBase64() {
   const payload = openai.buildUpstreamRequest(
     {
       model: "gpt-4o",
-      input: [{
-        role: "user",
-        content: [
-          { type: "input_text", text: "What's this?" },
-          { type: "input_image", image_url: "https://example.com/photo.jpg" },
-        ],
-      }],
+      input: [
+        {
+          role: "user",
+          content: [
+            { type: "input_text", text: "What's this?" },
+            { type: "input_image", image_url: "https://example.com/photo.jpg" },
+          ],
+        },
+      ],
     },
     { model: "gpt-4o" },
-    {}
+    {},
   );
   const lastMsg = payload.messages[payload.messages.length - 1];
   assert(Array.isArray(lastMsg.content), "content is array");
-  const imgPart = lastMsg.content.find(function (p) { return p.type === "image_url"; });
+  const imgPart = lastMsg.content.find(function (p) {
+    return p.type === "image_url";
+  });
   assert(imgPart !== undefined, "has image_url part");
   assert(imgPart.image_url.url === "https://example.com/photo.jpg", "URL preserved");
 }
@@ -353,19 +340,23 @@ function testOpenAIChatImageUrlBase64() {
   const payload = openai.buildUpstreamRequest(
     {
       model: "gpt-4o",
-      input: [{
-        role: "user",
-        content: [
-          { type: "input_text", text: "Describe" },
-          { type: "input_image", image_url: "data:image/png;base64,iVBORw0KGgo=" },
-        ],
-      }],
+      input: [
+        {
+          role: "user",
+          content: [
+            { type: "input_text", text: "Describe" },
+            { type: "input_image", image_url: "data:image/png;base64,iVBORw0KGgo=" },
+          ],
+        },
+      ],
     },
     { model: "gpt-4o" },
-    {}
+    {},
   );
   const lastMsg = payload.messages[payload.messages.length - 1];
-  const imgPart = lastMsg.content.find(function (p) { return p.type === "image_url"; });
+  const imgPart = lastMsg.content.find(function (p) {
+    return p.type === "image_url";
+  });
   assert(imgPart !== undefined, "has image_url part for base64");
   assert(imgPart.image_url.url.startsWith("data:image/png;base64,"), "base64 URI preserved");
 }
@@ -375,13 +366,15 @@ function testOpenAIChatSingleTextPartFlat() {
   const payload = openai.buildUpstreamRequest(
     {
       model: "gpt-4o",
-      input: [{
-        role: "user",
-        content: [{ type: "input_text", text: "Hello" }],
-      }],
+      input: [
+        {
+          role: "user",
+          content: [{ type: "input_text", text: "Hello" }],
+        },
+      ],
     },
     { model: "gpt-4o" },
-    {}
+    {},
   );
   const lastMsg = payload.messages[payload.messages.length - 1];
   assert(typeof lastMsg.content === "string", "content is string (not array)");
@@ -390,21 +383,13 @@ function testOpenAIChatSingleTextPartFlat() {
 
 function testOpenAIChatEmptyInput() {
   console.log("\n[Test] openai-chat: empty input -> empty messages array");
-  const payload = openai.buildUpstreamRequest(
-    { model: "gpt-4o", input: "" },
-    { model: "gpt-4o" },
-    {}
-  );
+  const payload = openai.buildUpstreamRequest({ model: "gpt-4o", input: "" }, { model: "gpt-4o" }, {});
   assert(payload.messages.length === 0, "no messages for empty string input");
 }
 
 function testOpenAIChatEmptyInputArray() {
   console.log("\n[Test] openai-chat: empty input array -> empty messages");
-  const payload = openai.buildUpstreamRequest(
-    { model: "gpt-4o", input: [] },
-    { model: "gpt-4o" },
-    {}
-  );
+  const payload = openai.buildUpstreamRequest({ model: "gpt-4o", input: [] }, { model: "gpt-4o" }, {});
   assert(payload.messages.length === 0, "no messages for empty array input");
 }
 
@@ -413,16 +398,18 @@ function testOpenAIChatVisionFalse() {
   const payload = openai.buildUpstreamRequest(
     {
       model: "gpt-4o",
-      input: [{
-        role: "user",
-        content: [
-          { type: "input_text", text: "Hi" },
-          { type: "input_image", image_url: "https://example.com/photo.jpg" },
-        ],
-      }],
+      input: [
+        {
+          role: "user",
+          content: [
+            { type: "input_text", text: "Hi" },
+            { type: "input_image", image_url: "https://example.com/photo.jpg" },
+          ],
+        },
+      ],
     },
     { model: "gpt-4o", vision: false },
-    {}
+    {},
   );
   const lastMsg = payload.messages[payload.messages.length - 1];
   assert(typeof lastMsg.content === "string", "content flattens to string (no image)");
@@ -431,11 +418,7 @@ function testOpenAIChatVisionFalse() {
 
 function testOpenAIChatMissingOptionalFields() {
   console.log("\n[Test] openai-chat: missing optional fields produce clean payload");
-  const payload = openai.buildUpstreamRequest(
-    { model: "gpt-4o", input: "Hi" },
-    { model: "gpt-4o" },
-    {}
-  );
+  const payload = openai.buildUpstreamRequest({ model: "gpt-4o", input: "Hi" }, { model: "gpt-4o" }, {});
   assert(payload.model === "gpt-4o", "model set");
   assert(payload.stream === true, "stream defaults to true");
   assert(payload.temperature === undefined, "no temperature when absent");
@@ -448,31 +431,19 @@ function testOpenAIChatMissingOptionalFields() {
 
 function testOpenAIChatStreamExplicitFalse() {
   console.log("\n[Test] openai-chat: stream:false respected");
-  const payload = openai.buildUpstreamRequest(
-    { model: "gpt-4o", input: "Hi", stream: false },
-    { model: "gpt-4o" },
-    {}
-  );
+  const payload = openai.buildUpstreamRequest({ model: "gpt-4o", input: "Hi", stream: false }, { model: "gpt-4o" }, {});
   assert(payload.stream === false, "stream is false");
 }
 
 function testOpenAIChatProviderModelOverride() {
   console.log("\n[Test] openai-chat: provider.model overrides requestBody.model");
-  const payload = openai.buildUpstreamRequest(
-    { model: "override-me", input: "Hi" },
-    { model: "gpt-4o" },
-    {}
-  );
+  const payload = openai.buildUpstreamRequest({ model: "override-me", input: "Hi" }, { model: "gpt-4o" }, {});
   assert(payload.model === "gpt-4o", "provider model used");
 }
 
 function testOpenAIChatStringInArray() {
   console.log("\n[Test] openai-chat: plain string inside input array");
-  const payload = openai.buildUpstreamRequest(
-    { model: "gpt-4o", input: ["Hello", "World"] },
-    { model: "gpt-4o" },
-    {}
-  );
+  const payload = openai.buildUpstreamRequest({ model: "gpt-4o", input: ["Hello", "World"] }, { model: "gpt-4o" }, {});
   assert(payload.messages.length === 2, "two messages");
   assert(payload.messages[0].content === "Hello", "first string");
   assert(payload.messages[1].content === "World", "second string");
@@ -487,7 +458,7 @@ function testAnthropicInstructions() {
   const req = anthropic.buildUpstreamRequest(
     { model: "claude-sonnet-4-20250514", input: "Hello", instructions: "Be helpful." },
     { model: "claude-sonnet-4-20250514" },
-    {}
+    {},
   );
   assert(req.system === "Be helpful.", "system matches instructions");
   assert(req.messages.length === 1, "one user message");
@@ -505,7 +476,7 @@ function testAnthropicSystemRoleInput() {
       ],
     },
     { model: "claude-sonnet-4-20250514" },
-    {}
+    {},
   );
   assert(req.system === "Speak French.", "system extracted from input");
   assert(req.messages.length === 1, "only user message in messages");
@@ -524,7 +495,7 @@ function testAnthropicSystemMerged() {
       instructions: "Be polite.",
     },
     { model: "claude-sonnet-4-20250514" },
-    {}
+    {},
   );
   assert(req.system.indexOf("Be polite.") !== -1, "system contains instructions");
   assert(req.system.indexOf("Speak French.") !== -1, "system contains input system message");
@@ -537,7 +508,7 @@ function testAnthropicReasoningLow() {
   const req = anthropic.buildUpstreamRequest(
     { model: "claude-sonnet-4-20250514", input: "Hi", reasoning: { effort: "low" } },
     { model: "claude-sonnet-4-20250514" },
-    {}
+    {},
   );
   assert(req.thinking.budget_tokens === 2000, "low = 2000");
   assert(req.thinking.type === "enabled", "thinking enabled");
@@ -549,7 +520,7 @@ function testAnthropicReasoningMedium() {
   const req = anthropic.buildUpstreamRequest(
     { model: "claude-sonnet-4-20250514", input: "Hi", reasoning: { effort: "medium" } },
     { model: "claude-sonnet-4-20250514" },
-    {}
+    {},
   );
   assert(req.thinking.budget_tokens === 8000, "medium = 8000");
 }
@@ -559,7 +530,7 @@ function testAnthropicReasoningHigh() {
   const req = anthropic.buildUpstreamRequest(
     { model: "claude-sonnet-4-20250514", input: "Hi", reasoning: { effort: "high" } },
     { model: "claude-sonnet-4-20250514" },
-    {}
+    {},
   );
   assert(req.thinking.budget_tokens === 16000, "high = 16000");
 }
@@ -574,7 +545,7 @@ function testAnthropicReasoningXhigh() {
       reasoning: { effort: "xhigh" },
     },
     { model: "claude-sonnet-4-20250514" },
-    {}
+    {},
   );
   assert(req.thinking.budget_tokens === 8191, "xhigh = max_tokens - 1 when max_tokens < 32000");
 }
@@ -589,7 +560,7 @@ function testAnthropicReasoningXhighLargeTokens() {
       reasoning: { effort: "xhigh" },
     },
     { model: "claude-sonnet-4-20250514" },
-    {}
+    {},
   );
   assert(req.thinking.budget_tokens === 32000, "xhigh capped at 32000");
 }
@@ -604,7 +575,7 @@ function testAnthropicReasoningMax() {
       reasoning: { effort: "max" },
     },
     { model: "claude-sonnet-4-20250514" },
-    {}
+    {},
   );
   assert(req.thinking.budget_tokens === 8191, "max = max_tokens - 1 (same as xhigh)");
   assert(req.thinking.type === "enabled", "thinking enabled for max");
@@ -612,11 +583,7 @@ function testAnthropicReasoningMax() {
 
 function testAnthropicNoReasoning() {
   console.log("\n[Test] anthropic: no reasoning -> no thinking block");
-  const req = anthropic.buildUpstreamRequest(
-    { model: "claude-sonnet-4-20250514", input: "Hi" },
-    { model: "claude-sonnet-4-20250514" },
-    {}
-  );
+  const req = anthropic.buildUpstreamRequest({ model: "claude-sonnet-4-20250514", input: "Hi" }, { model: "claude-sonnet-4-20250514" }, {});
   assert(req.thinking === undefined, "no thinking block");
 }
 
@@ -626,15 +593,17 @@ function testAnthropicTools() {
     {
       model: "claude-sonnet-4-20250514",
       input: "Weather?",
-      tools: [{
-        type: "function",
-        name: "get_weather",
-        description: "Get weather",
-        parameters: { type: "object", properties: { city: { type: "string" } }, required: ["city"] },
-      }],
+      tools: [
+        {
+          type: "function",
+          name: "get_weather",
+          description: "Get weather",
+          parameters: { type: "object", properties: { city: { type: "string" } }, required: ["city"] },
+        },
+      ],
     },
     { model: "claude-sonnet-4-20250514" },
-    {}
+    {},
   );
   assert(Array.isArray(req.tools) && req.tools.length === 1, "has one tool");
   assert(req.tools[0].name === "get_weather", "tool name matches");
@@ -647,14 +616,14 @@ function testAnthropicFunctionCall() {
   const req = anthropic.buildUpstreamRequest(
     {
       model: "claude-sonnet-4-20250514",
-      input: [
-        { type: "function_call", call_id: "call_123", name: "get_weather", arguments: '{"city":"London"}' },
-      ],
+      input: [{ type: "function_call", call_id: "call_123", name: "get_weather", arguments: '{"city":"London"}' }],
     },
     { model: "claude-sonnet-4-20250514" },
-    {}
+    {},
   );
-  const asst = req.messages.find(function (m) { return m.role === "assistant"; });
+  const asst = req.messages.find(function (m) {
+    return m.role === "assistant";
+  });
   assert(asst !== undefined, "has assistant message");
   assert(Array.isArray(asst.content), "content is array");
   assert(asst.content[0].type === "tool_use", "block type is tool_use");
@@ -668,14 +637,14 @@ function testAnthropicFunctionCallOutput() {
   const req = anthropic.buildUpstreamRequest(
     {
       model: "claude-sonnet-4-20250514",
-      input: [
-        { type: "function_call_output", call_id: "call_123", output: "sunny" },
-      ],
+      input: [{ type: "function_call_output", call_id: "call_123", output: "sunny" }],
     },
     { model: "claude-sonnet-4-20250514" },
-    {}
+    {},
   );
-  const userMsg = req.messages.find(function (m) { return m.role === "user"; });
+  const userMsg = req.messages.find(function (m) {
+    return m.role === "user";
+  });
   assert(userMsg !== undefined, "has user message");
   assert(Array.isArray(userMsg.content), "content is array");
   const result = userMsg.content[0];
@@ -695,9 +664,11 @@ function testAnthropicFunctionCallMerge() {
       ],
     },
     { model: "claude-sonnet-4-20250514" },
-    {}
+    {},
   );
-  const asst = req.messages.find(function (m) { return m.role === "assistant"; });
+  const asst = req.messages.find(function (m) {
+    return m.role === "assistant";
+  });
   assert(asst !== undefined, "has assistant message");
   assert(Array.isArray(asst.content), "content is array after merge");
   assert(asst.content.length >= 2, "has at least 2 blocks (text + tool_use)");
@@ -717,9 +688,11 @@ function testAnthropicFunctionCallOutputMerge() {
       ],
     },
     { model: "claude-sonnet-4-20250514" },
-    {}
+    {},
   );
-  const userMsg = req.messages.find(function (m) { return m.role === "user"; });
+  const userMsg = req.messages.find(function (m) {
+    return m.role === "user";
+  });
   assert(userMsg !== undefined, "has user message");
   assert(Array.isArray(userMsg.content), "content is array after merge");
   assert(userMsg.content.length >= 2, "has text + tool_result");
@@ -733,20 +706,24 @@ function testAnthropicImageDataUri() {
   const req = anthropic.buildUpstreamRequest(
     {
       model: "claude-sonnet-4-20250514",
-      input: [{
-        role: "user",
-        content: [
-          { type: "input_text", text: "Describe" },
-          { type: "input_image", image_url: "data:image/jpeg;base64,/9j/4AAQ=" },
-        ],
-      }],
+      input: [
+        {
+          role: "user",
+          content: [
+            { type: "input_text", text: "Describe" },
+            { type: "input_image", image_url: "data:image/jpeg;base64,/9j/4AAQ=" },
+          ],
+        },
+      ],
     },
     { model: "claude-sonnet-4-20250514" },
-    {}
+    {},
   );
   const lastMsg = req.messages[req.messages.length - 1];
   assert(Array.isArray(lastMsg.content), "content is array");
-  const imgPart = lastMsg.content.find(function (p) { return p.type === "image"; });
+  const imgPart = lastMsg.content.find(function (p) {
+    return p.type === "image";
+  });
   assert(imgPart !== undefined, "has image part");
   assert(imgPart.source.type === "base64", "source type is base64");
   assert(imgPart.source.media_type === "image/jpeg", "media_type extracted");
@@ -758,16 +735,18 @@ function testAnthropicImageHttpUrl() {
   const req = anthropic.buildUpstreamRequest(
     {
       model: "claude-sonnet-4-20250514",
-      input: [{
-        role: "user",
-        content: [
-          { type: "input_text", text: "Hi" },
-          { type: "input_image", image_url: "https://example.com/photo.jpg" },
-        ],
-      }],
+      input: [
+        {
+          role: "user",
+          content: [
+            { type: "input_text", text: "Hi" },
+            { type: "input_image", image_url: "https://example.com/photo.jpg" },
+          ],
+        },
+      ],
     },
     { model: "claude-sonnet-4-20250514" },
-    {}
+    {},
   );
   const lastMsg = req.messages[req.messages.length - 1];
   assert(typeof lastMsg.content === "string", "non-data URI skipped, flattens to string");
@@ -782,7 +761,7 @@ function testAnthropicSingleTextFlat() {
       input: [{ role: "user", content: [{ type: "input_text", text: "Hello" }] }],
     },
     { model: "claude-sonnet-4-20250514" },
-    {}
+    {},
   );
   const lastMsg = req.messages[req.messages.length - 1];
   assert(typeof lastMsg.content === "string", "flattens to string");
@@ -794,7 +773,7 @@ function testAnthropicStringInput() {
   const req = anthropic.buildUpstreamRequest(
     { model: "claude-sonnet-4-20250514", input: "Hello" },
     { model: "claude-sonnet-4-20250514" },
-    {}
+    {},
   );
   assert(req.messages.length === 1, "one message");
   assert(req.messages[0].role === "user", "role is user");
@@ -803,11 +782,7 @@ function testAnthropicStringInput() {
 
 function testAnthropicDefaultMaxTokens() {
   console.log("\n[Test] anthropic: default max_tokens=8192");
-  const req = anthropic.buildUpstreamRequest(
-    { model: "claude-sonnet-4-20250514", input: "Hi" },
-    { model: "claude-sonnet-4-20250514" },
-    {}
-  );
+  const req = anthropic.buildUpstreamRequest({ model: "claude-sonnet-4-20250514", input: "Hi" }, { model: "claude-sonnet-4-20250514" }, {});
   assert(req.max_tokens === 8192, "default max_tokens is 8192");
 }
 
@@ -822,7 +797,7 @@ function testAnthropicMessageTypeSystem() {
       ],
     },
     { model: "claude-sonnet-4-20250514" },
-    {}
+    {},
   );
   assert(req.system === "You are a poet.", "system from message-type");
   assert(req.messages.length === 1, "one user message");
@@ -876,11 +851,17 @@ function testSseBridgeReasoningDelta() {
   bridge.handleEvent(events.reasoningDeltaEvent("Let me think..."));
   // Find reasoning events in captured output (skip initial 2)
   const sseEvents = parseSseResponse(res);
-  const addedEvent = sseEvents.find(function (e) { return e.event === "response.output_item.added" && e.data.item.type === "reasoning"; });
+  const addedEvent = sseEvents.find(function (e) {
+    return e.event === "response.output_item.added" && e.data.item.type === "reasoning";
+  });
   assert(addedEvent !== undefined, "reasoning output_item.added emitted");
-  const summaryEvent = sseEvents.find(function (e) { return e.event === "response.reasoning_summary_part.added"; });
+  const summaryEvent = sseEvents.find(function (e) {
+    return e.event === "response.reasoning_summary_part.added";
+  });
   assert(summaryEvent !== undefined, "reasoning_summary_part.added emitted");
-  const deltaEvent = sseEvents.find(function (e) { return e.event === "response.reasoning_summary_text.delta"; });
+  const deltaEvent = sseEvents.find(function (e) {
+    return e.event === "response.reasoning_summary_text.delta";
+  });
   assert(deltaEvent !== undefined, "reasoning_summary_text.delta emitted");
   assert(deltaEvent.data.delta === "Let me think...", "delta matches");
 }
@@ -891,11 +872,17 @@ function testSseBridgeTextDelta() {
   const bridge = createSseBridge(res, "resp_001", "test-model");
   bridge.handleEvent(events.textDeltaEvent("Hello!"));
   const sseEvents = parseSseResponse(res);
-  const addedEvent = sseEvents.find(function (e) { return e.event === "response.output_item.added" && e.data.item.type === "message"; });
+  const addedEvent = sseEvents.find(function (e) {
+    return e.event === "response.output_item.added" && e.data.item.type === "message";
+  });
   assert(addedEvent !== undefined, "message output_item.added emitted");
-  const contentEvent = sseEvents.find(function (e) { return e.event === "response.content_part.added"; });
+  const contentEvent = sseEvents.find(function (e) {
+    return e.event === "response.content_part.added";
+  });
   assert(contentEvent !== undefined, "content_part.added emitted");
-  const deltaEvent = sseEvents.find(function (e) { return e.event === "response.output_text.delta"; });
+  const deltaEvent = sseEvents.find(function (e) {
+    return e.event === "response.output_text.delta";
+  });
   assert(deltaEvent !== undefined, "output_text.delta emitted");
   assert(deltaEvent.data.delta === "Hello!", "delta matches");
 }
@@ -908,11 +895,15 @@ function testSseBridgeTextAfterReasoning() {
   bridge.handleEvent(events.textDeltaEvent("answer"));
   const sseEvents = parseSseResponse(res);
   // Check that reasoning was closed (reasoning_summary_text.done emitted)
-  const reasoningDone = sseEvents.find(function (e) { return e.event === "response.reasoning_summary_text.done"; });
+  const reasoningDone = sseEvents.find(function (e) {
+    return e.event === "response.reasoning_summary_text.done";
+  });
   assert(reasoningDone !== undefined, "reasoning_summary_text.done emitted when text starts");
   assert(reasoningDone.data.text === "thinking...", "full reasoning text captured");
   // Also check that output_item.done for reasoning emitted
-  const itemDone = sseEvents.find(function (e) { return e.event === "response.output_item.done" && e.data.item.type === "reasoning"; });
+  const itemDone = sseEvents.find(function (e) {
+    return e.event === "response.output_item.done" && e.data.item.type === "reasoning";
+  });
   assert(itemDone !== undefined, "reasoning output_item.done emitted");
 }
 
@@ -922,7 +913,9 @@ function testSseBridgeToolCallStart() {
   const bridge = createSseBridge(res, "resp_001", "test-model");
   bridge.handleEvent(events.toolCallStartEvent("call_abc", "get_weather"));
   const sseEvents = parseSseResponse(res);
-  const addedEvent = sseEvents.find(function (e) { return e.event === "response.output_item.added" && e.data.item.type === "function_call"; });
+  const addedEvent = sseEvents.find(function (e) {
+    return e.event === "response.output_item.added" && e.data.item.type === "function_call";
+  });
   assert(addedEvent !== undefined, "function_call output_item.added emitted");
   assert(addedEvent.data.item.name === "get_weather", "name correct");
   assert(addedEvent.data.item.call_id === "call_abc", "call_id correct");
@@ -936,7 +929,9 @@ function testSseBridgeToolCallArgsDelta() {
   bridge.handleEvent(events.toolCallArgsDeltaEvent("call_abc", '{"city'));
   bridge.handleEvent(events.toolCallArgsDeltaEvent("call_abc", '":"NYC"}'));
   const sseEvents = parseSseResponse(res);
-  const deltas = sseEvents.filter(function (e) { return e.event === "response.function_call_arguments.delta"; });
+  const deltas = sseEvents.filter(function (e) {
+    return e.event === "response.function_call_arguments.delta";
+  });
   assert(deltas.length === 2, "two arg delta events");
   assert(deltas[0].data.delta === '{"city', "first delta correct");
   assert(deltas[1].data.delta === '":"NYC"}', "second delta correct");
@@ -949,10 +944,14 @@ function testSseBridgeToolCallEnd() {
   bridge.handleEvent(events.toolCallStartEvent("call_abc", "get_weather"));
   bridge.handleEvent(events.toolCallEndEvent("call_abc", "get_weather", '{"city":"NYC"}'));
   const sseEvents = parseSseResponse(res);
-  const doneEvent = sseEvents.find(function (e) { return e.event === "response.function_call_arguments.done"; });
+  const doneEvent = sseEvents.find(function (e) {
+    return e.event === "response.function_call_arguments.done";
+  });
   assert(doneEvent !== undefined, "function_call_arguments.done emitted");
   assert(doneEvent.data.arguments === '{"city":"NYC"}', "arguments captured");
-  const itemDone = sseEvents.find(function (e) { return e.event === "response.output_item.done" && e.data.item.type === "function_call"; });
+  const itemDone = sseEvents.find(function (e) {
+    return e.event === "response.output_item.done" && e.data.item.type === "function_call";
+  });
   assert(itemDone !== undefined, "output_item.done emitted");
   assert(itemDone.data.item.status === "completed", "status completed");
 }
@@ -964,7 +963,9 @@ function testSseBridgeResponseCompleted() {
   bridge.handleEvent(events.textDeltaEvent("Hello"));
   bridge.handleEvent(events.responseCompletedEvent({ input_tokens: 10, output_tokens: 5, total_tokens: 15 }));
   const sseEvents = parseSseResponse(res);
-  const completedEvent = sseEvents.find(function (e) { return e.event === "response.completed"; });
+  const completedEvent = sseEvents.find(function (e) {
+    return e.event === "response.completed";
+  });
   assert(completedEvent !== undefined, "response.completed emitted");
   assert(completedEvent.data.response.status === "completed", "status completed");
   assert(completedEvent.data.response.usage.input_tokens === 10, "usage input_tokens");
@@ -980,7 +981,9 @@ function testSseBridgeError() {
   const bridge = createSseBridge(res, "resp_001", "test-model");
   bridge.handleEvent(events.errorEvent("Something went wrong", "api_error"));
   const sseEvents = parseSseResponse(res);
-  const failedEvent = sseEvents.find(function (e) { return e.event === "response.failed"; });
+  const failedEvent = sseEvents.find(function (e) {
+    return e.event === "response.failed";
+  });
   assert(failedEvent !== undefined, "response.failed emitted");
   assert(failedEvent.data.response.status === "failed", "status failed");
   assert(failedEvent.data.response.error.message === "Something went wrong", "error message");
@@ -1004,7 +1007,9 @@ function testSseBridgeWriteAfterEnd() {
   assert(threw === false, "no error thrown when writing to ended response");
   // Verify no new writes beyond the initial setup
   const sseEvents = parseSseResponse(res);
-  const textDeltas = sseEvents.filter(function (e) { return e.event === "response.output_text.delta"; });
+  const textDeltas = sseEvents.filter(function (e) {
+    return e.event === "response.output_text.delta";
+  });
   assert(textDeltas.length === 0, "no text delta events when writableEnded");
 }
 
@@ -1036,7 +1041,7 @@ function testEventTypeEnum() {
   assert(et.TOOL_CALL_END === "tool_call_end", "TOOL_CALL_END");
   assert(et.RESPONSE_COMPLETED === "response_completed", "RESPONSE_COMPLETED");
   assert(et.ERROR === "error", "ERROR");
-  assert(Object.keys(et).length === 8, "exactly 8 values");
+  assert(Object.keys(et).length === 12, "exactly 12 values");
 }
 
 function testResponseCreatedEvent() {
@@ -1153,19 +1158,20 @@ function testMakeIdUnique() {
 function testCreateSequence() {
   console.log("\n[Test] http: createSequence produces incrementing numbers");
   const seq = createSequence();
-  assert(seq.next() === 1, "first is 1");
-  assert(seq.next() === 2, "second is 2");
-  assert(seq.next() === 3, "third is 3");
+  assert(seq.next() === 0, "first is 0");
+  assert(seq.next() === 1, "second is 1");
+  assert(seq.next() === 2, "third is 2");
 }
 
 function testCreateSequenceIndependent() {
   console.log("\n[Test] http: createSequence instances are independent");
   const a = createSequence();
   const b = createSequence();
-  a.next(); a.next();
+  a.next();
+  a.next();
   b.next();
-  assert(a.next() === 3, "a=3");
-  assert(b.next() === 2, "b=2");
+  assert(a.next() === 2, "a=2");
+  assert(b.next() === 1, "b=1");
 }
 
 function testEmitSse() {
@@ -1297,17 +1303,28 @@ function testResolvePresetNull() {
 }
 
 function testGetQuickPresets() {
-  console.log("\n[Test] presets: getQuickPresets returns all presets as array");
+  console.log("\n[Test] presets: getQuickPresets returns only vendor presets (with hooks)");
   const list = presets.getQuickPresets();
   assert(Array.isArray(list), "returns array");
-  assert(list.length >= 3, "at least 3 presets (openai-chat, anthropic, deepseek)");
-  const ids = list.map(function (p) { return p.id; });
-  assert(ids.indexOf("openai-chat") !== -1, "contains openai-chat");
-  assert(ids.indexOf("anthropic") !== -1, "contains anthropic");
+  assert(list.length >= 3, "at least 3 presets (deepseek, kimi, kimi-coding)");
+  const ids = list.map(function (p) {
+    return p.id;
+  });
+  // Protocol templates (openai-chat, anthropic) are excluded — UI provides a "Custom" button instead
+  assert(ids.indexOf("openai-chat") === -1, "openai-chat excluded (now handled by Custom button)");
+  assert(ids.indexOf("anthropic") === -1, "anthropic excluded (now handled by Custom button)");
   assert(ids.indexOf("deepseek") !== -1, "contains deepseek");
+  assert(ids.indexOf("kimi") !== -1, "contains kimi");
   // Check deepseek has models
-  const ds = list.find(function (p) { return p.id === "deepseek"; });
+  const ds = list.find(function (p) {
+    return p.id === "deepseek";
+  });
   assert(ds.models.length > 0, "deepseek has models array");
+  // deepseek and kimi-coding have hooks (vendor: true), kimi uses vendor: false (no hooks)
+  var ds2 = list.find(function (p) { return p.id === "deepseek"; });
+  assert(ds2.vendor === true, "deepseek is a vendor preset");
+  var kc = list.find(function (p) { return p.id === "kimi-coding"; });
+  assert(kc.vendor === true, "kimi-coding is a vendor preset");
 }
 
 function testGetVariantBaseUrl() {
@@ -1347,7 +1364,7 @@ function testOpenAIChatEmptyContentParts() {
       input: [{ role: "user", content: [] }],
     },
     { model: "gpt-4o" },
-    {}
+    {},
   );
   const msg = payload.messages[0];
   assert(msg.role === "user", "role is user");
@@ -1362,7 +1379,7 @@ function testOpenAIChatUndefinedContent() {
       input: [null, undefined, { role: "user", content: "valid" }],
     },
     { model: "gpt-4o" },
-    {}
+    {},
   );
   assert(payload.messages.length === 1, "null/undefined items skipped");
   assert(payload.messages[0].content === "valid", "valid message kept");
@@ -1370,21 +1387,13 @@ function testOpenAIChatUndefinedContent() {
 
 function testOpenAIChatEmptyToolsArray() {
   console.log("\n[Test] edge: openai-chat empty tools array -> no tools field");
-  const payload = openai.buildUpstreamRequest(
-    { model: "gpt-4o", input: "Hi", tools: [] },
-    { model: "gpt-4o" },
-    {}
-  );
+  const payload = openai.buildUpstreamRequest({ model: "gpt-4o", input: "Hi", tools: [] }, { model: "gpt-4o" }, {});
   assert(payload.tools === undefined, "no tools when array empty");
 }
 
 function testUnicodeText() {
   console.log("\n[Test] edge: unicode text handled correctly");
-  const payload = openai.buildUpstreamRequest(
-    { model: "gpt-4o", input: "你好 世界" },
-    { model: "gpt-4o" },
-    {}
-  );
+  const payload = openai.buildUpstreamRequest({ model: "gpt-4o", input: "你好 世界" }, { model: "gpt-4o" }, {});
   assert(payload.messages[0].content === "你好 世界", "Chinese text preserved");
 }
 
@@ -1396,7 +1405,7 @@ function testUnicodeTextInParts() {
       input: [{ role: "user", content: [{ type: "input_text", text: "éàü" }] }],
     },
     { model: "gpt-4o" },
-    {}
+    {},
   );
   assert(payload.messages[0].content === "éàü", "accented chars preserved");
 }
@@ -1406,7 +1415,7 @@ function testAnthropicTemperatureZero() {
   const req = anthropic.buildUpstreamRequest(
     { model: "claude-sonnet-4-20250514", input: "Hi", temperature: 0 },
     { model: "claude-sonnet-4-20250514" },
-    {}
+    {},
   );
   assert(req.temperature === 0, "temperature=0 preserved");
 }
@@ -1416,28 +1425,20 @@ function testAnthropicStreamExplicitFalse() {
   const req = anthropic.buildUpstreamRequest(
     { model: "claude-sonnet-4-20250514", input: "Hi", stream: false },
     { model: "claude-sonnet-4-20250514" },
-    {}
+    {},
   );
   assert(req.stream === false, "stream is false");
 }
 
 function testOpenAIChatNoProviderModel() {
   console.log("\n[Test] edge: openai-chat uses requestBody.model when provider.model absent");
-  const payload = openai.buildUpstreamRequest(
-    { model: "my-model", input: "Hi" },
-    {},
-    {}
-  );
+  const payload = openai.buildUpstreamRequest({ model: "my-model", input: "Hi" }, {}, {});
   assert(payload.model === "my-model", "falls back to requestBody.model");
 }
 
 function testAnthropicNoProviderModel() {
   console.log("\n[Test] edge: anthropic uses requestBody.model when provider.model absent");
-  const req = anthropic.buildUpstreamRequest(
-    { model: "my-claude", input: "Hi" },
-    {},
-    {}
-  );
+  const req = anthropic.buildUpstreamRequest({ model: "my-claude", input: "Hi" }, {}, {});
   assert(req.model === "my-claude", "falls back to requestBody.model");
 }
 
@@ -1446,14 +1447,14 @@ function testAnthropicFunctionCallDefaultArguments() {
   const req = anthropic.buildUpstreamRequest(
     {
       model: "claude-sonnet-4-20250514",
-      input: [
-        { type: "function_call", call_id: "call_x", name: "do_thing" },
-      ],
+      input: [{ type: "function_call", call_id: "call_x", name: "do_thing" }],
     },
     { model: "claude-sonnet-4-20250514" },
-    {}
+    {},
   );
-  const asst = req.messages.find(function (m) { return m.role === "assistant"; });
+  const asst = req.messages.find(function (m) {
+    return m.role === "assistant";
+  });
   assert(asst !== undefined, "assistant message exists");
   assert(asst.content[0].type === "tool_use", "tool_use block");
   assert(typeof asst.content[0].input === "object", "empty input defaults to {}");
@@ -1464,12 +1465,10 @@ function testOpenAIChatEmptyToolOutput() {
   const payload = openai.buildUpstreamRequest(
     {
       model: "gpt-4o",
-      input: [
-        { type: "function_call_output", call_id: "call_x", output: "" },
-      ],
+      input: [{ type: "function_call_output", call_id: "call_x", output: "" }],
     },
     { model: "gpt-4o" },
-    {}
+    {},
   );
   assert(payload.messages[0].content === "", "empty output preserved as empty string");
 }
@@ -1479,13 +1478,15 @@ function testOpenAIChatOutputTextPart() {
   const payload = openai.buildUpstreamRequest(
     {
       model: "gpt-4o",
-      input: [{
-        role: "assistant",
-        content: [{ type: "output_text", text: "I think therefore I am" }],
-      }],
+      input: [
+        {
+          role: "assistant",
+          content: [{ type: "output_text", text: "I think therefore I am" }],
+        },
+      ],
     },
     { model: "gpt-4o" },
-    {}
+    {},
   );
   assert(payload.messages[0].role === "assistant", "assistant role");
   assert(payload.messages[0].content === "I think therefore I am", "output_text flattened to string");

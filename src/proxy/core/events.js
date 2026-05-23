@@ -9,6 +9,10 @@ const EventType = {
   TOOL_CALL_END: "tool_call_end",
   RESPONSE_COMPLETED: "response_completed",
   ERROR: "error",
+  RESPONSE_INCOMPLETE: "response_incomplete",
+  REFUSAL_DELTA: "refusal_delta",
+  REASONING_TEXT_DELTA: "reasoning_text_delta",
+  ANNOTATION_ADDED: "annotation_added",
 };
 
 function responseCreatedEvent(meta) {
@@ -43,6 +47,22 @@ function errorEvent(message, code) {
   return { type: EventType.ERROR, message, code };
 }
 
+function responseIncompleteEvent(reason) {
+  return { type: EventType.RESPONSE_INCOMPLETE, reason };
+}
+
+function refusalDeltaEvent(delta) {
+  return { type: EventType.REFUSAL_DELTA, delta };
+}
+
+function reasoningTextDeltaEvent(delta) {
+  return { type: EventType.REASONING_TEXT_DELTA, delta };
+}
+
+function annotationAddedEvent(annotation) {
+  return { type: EventType.ANNOTATION_ADDED, annotation };
+}
+
 module.exports = {
   EventType,
   responseCreatedEvent,
@@ -53,4 +73,8 @@ module.exports = {
   toolCallEndEvent,
   responseCompletedEvent,
   errorEvent,
+  responseIncompleteEvent,
+  refusalDeltaEvent,
+  reasoningTextDeltaEvent,
+  annotationAddedEvent,
 };

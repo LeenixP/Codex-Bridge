@@ -3,7 +3,7 @@
 const { makeId, nowSeconds, createSequence, emitSse } = require("../../shared/http");
 const { EventType } = require("./events");
 
-function createSseBridge(res, responseId, model, traceSession) {
+function createSseBridge(res, responseId, model, traceSession, previousResponseId) {
   const seq = createSequence();
   const createdAt = nowSeconds();
   let outputIndex = 0;
@@ -16,7 +16,7 @@ function createSseBridge(res, responseId, model, traceSession) {
   res.writeHead(200, {
     "Content-Type": "text/event-stream; charset=utf-8",
     "Cache-Control": "no-cache, no-transform",
-    "Connection": "keep-alive",
+    Connection: "keep-alive",
     "X-Accel-Buffering": "no",
   });
   if (res.socket && typeof res.socket.setNoDelay === "function") res.socket.setNoDelay(true);
@@ -29,6 +29,7 @@ function createSseBridge(res, responseId, model, traceSession) {
     model,
     status: "in_progress",
     output: [],
+    previous_response_id: previousResponseId || null,
   };
 
   function emitToClient(eventType, data) {
@@ -71,13 +72,25 @@ function createSseBridge(res, responseId, model, traceSession) {
       case EventType.ERROR:
         handleError(event.message, event.code);
         break;
+      case EventType.RESPONSE_INCOMPLETE:
+        handleResponseIncomplete(event.reason);
+        break;
+      case EventType.REFUSAL_DELTA:
+        handleRefusalDelta(event.delta);
+        break;
+      case EventType.REASONING_TEXT_DELTA:
+        handleReasoningTextDelta(event.delta);
+        break;
+      case EventType.ANNOTATION_ADDED:
+        handleAnnotationAdded(event.annotation);
+        break;
     }
   }
 
   function handleReasoningDelta(delta) {
     if (!reasoningItem) {
       closeMessage(); // flush any open message before starting a new reasoning block
-      reasoningItem = { id: makeId("rs"), outputIndex: outputIndex++, text: "" };
+      reasoningItem = { id: makeId("rs"), outputIndex: outputIndex++, text: "", encrypted_content: null };
       emitToClient("response.output_item.added", {
         type: "response.output_item.added",
         response_id: responseId,
@@ -132,6 +145,7 @@ function createSseBridge(res, responseId, model, traceSession) {
       type: "reasoning",
       status: "completed",
       summary: [{ type: "summary_text", text: reasoningItem.text }],
+      encrypted_content: null,
     };
     emitToClient("response.output_item.done", {
       type: "response.output_item.done",
@@ -147,7 +161,7 @@ function createSseBridge(res, responseId, model, traceSession) {
   function handleTextDelta(delta) {
     closeReasoning();
     if (!messageItem) {
-      messageItem = { id: makeId("msg"), outputIndex: outputIndex++, text: "" };
+      messageItem = { id: makeId("msg"), outputIndex: outputIndex++, text: "", phase: null };
       emitToClient("response.output_item.added", {
         type: "response.output_item.added",
         response_id: responseId,
@@ -202,6 +216,7 @@ function createSseBridge(res, responseId, model, traceSession) {
       type: "message",
       role: "assistant",
       status: "completed",
+      phase: "final_answer",
       content: [{ type: "output_text", text: messageItem.text, annotations: [] }],
     };
     emitToClient("response.output_item.done", {
@@ -285,7 +300,15 @@ function createSseBridge(res, responseId, model, traceSession) {
       model,
       status: "completed",
       output,
-      usage: usage || null,
+      usage: usage
+        ? {
+            input_tokens: usage.input_tokens || 0,
+            input_tokens_details: { cached_tokens: 0 },
+            output_tokens: usage.output_tokens || 0,
+            output_tokens_details: { reasoning_tokens: usage.reasoning_tokens || 0 },
+            total_tokens: (usage.input_tokens || 0) + (usage.output_tokens || 0),
+          }
+        : null,
     };
     emitToClient("response.completed", {
       type: "response.completed",
@@ -315,6 +338,88 @@ function createSseBridge(res, responseId, model, traceSession) {
     });
     res.write("data: [DONE]\n\n");
     res.end();
+  }
+
+  function closeAllItems() {
+    closeReasoning();
+    closeMessage();
+    for (const [, tcItem] of toolCallItems) {
+      const doneItem = {
+        id: tcItem.id,
+        type: "function_call",
+        call_id: tcItem.callId,
+        name: tcItem.name,
+        status: "incomplete",
+        arguments: tcItem.args,
+      };
+      emitToClient("response.output_item.done", {
+        type: "response.output_item.done",
+        response_id: responseId,
+        output_index: tcItem.outputIndex,
+        item: doneItem,
+        sequence_number: seq.next(),
+      });
+      output.push(doneItem);
+    }
+    toolCallItems.clear();
+  }
+
+  function handleResponseIncomplete(reason) {
+    closeAllItems();
+    emitToClient("response.incomplete", {
+      type: "response.incomplete",
+      response: {
+        id: responseId,
+        object: "response",
+        created_at: createdAt,
+        model,
+        status: "incomplete",
+        output,
+        incomplete_details: { reason: reason || "max_output_tokens" },
+      },
+      sequence_number: seq.next(),
+    });
+    res.end();
+  }
+
+  function handleRefusalDelta(delta) {
+    if (res.writableEnded) return;
+    if (!messageItem) return;
+    emitToClient("response.refusal.delta", {
+      type: "response.refusal.delta",
+      response_id: responseId,
+      item_id: messageItem.id,
+      output_index: messageItem.outputIndex,
+      content_index: 0,
+      delta,
+      sequence_number: seq.next(),
+    });
+  }
+
+  function handleReasoningTextDelta(delta) {
+    if (res.writableEnded) return;
+    if (!reasoningItem) return;
+    emitToClient("response.reasoning_text.delta", {
+      type: "response.reasoning_text.delta",
+      response_id: responseId,
+      item_id: reasoningItem.id,
+      output_index: reasoningItem.outputIndex,
+      delta,
+      sequence_number: seq.next(),
+    });
+  }
+
+  function handleAnnotationAdded(annotation) {
+    if (res.writableEnded) return;
+    emitToClient("response.output_text.annotation.added", {
+      type: "response.output_text.annotation.added",
+      response_id: responseId,
+      item_id: messageItem ? messageItem.id : "",
+      output_index: messageItem ? messageItem.outputIndex : 0,
+      content_index: 0,
+      annotation,
+      sequence_number: seq.next(),
+    });
   }
 
   return { handleEvent, output };

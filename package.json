@@ -11,20 +11,27 @@
     "url": "git+https://github.com/LeenixP/Codex-Switch.git"
   },
   "main": "src/electron/main.js",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "start": "electron .",
+    "dev": "electron .",
     "check": "node scripts/check-syntax.js",
-    "test": "node test/unit-tests.js && node test/format-conversion.js && node test/proxy-integration.js && node test/anthropic-integration.js && node test/error-paths.js",
-    "test:unit": "node test/unit-tests.js && node test/format-conversion.js",
+    "test": "node test/unit-tests.js && node test/format-conversion.js && node test/thinking-parser.test.js && node test/proxy-integration.js && node test/anthropic-integration.js && node test/error-paths.js",
+    "test:unit": "node test/unit-tests.js && node test/format-conversion.js && node test/thinking-parser.test.js",
     "test:integration": "node test/proxy-integration.js && node test/anthropic-integration.js && node test/error-paths.js",
     "lint": "eslint src/ test/",
     "format": "prettier --write \"src/**/*.js\" \"test/**/*.js\"",
     "format:check": "prettier --check \"src/**/*.js\" \"test/**/*.js\"",
     "icons": "node scripts/generate-icons.js",
-    "dist": "electron-builder && node scripts/gen-checksums.js",
-    "dist:win": "electron-builder --win && node scripts/gen-checksums.js",
-    "dist:linux": "electron-builder --linux && node scripts/gen-checksums.js",
-    "dist:mac": "electron-builder --mac && node scripts/gen-checksums.js"
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true});require('fs').rmSync('node_modules',{recursive:true,force:true});console.log('Cleaned dist/ and node_modules/')\"",
+    "dist": "electron-builder && node scripts/prepare-release-assets.js && node scripts/gen-checksums.js",
+    "dist:all": "electron-builder --win --linux --mac && node scripts/prepare-release-assets.js && node scripts/gen-checksums.js",
+    "dist:win": "electron-builder --win && node scripts/prepare-release-assets.js && node scripts/gen-checksums.js",
+    "dist:linux": "electron-builder --linux && node scripts/prepare-release-assets.js && node scripts/gen-checksums.js",
+    "dist:mac": "electron-builder --mac && node scripts/prepare-release-assets.js && node scripts/gen-checksums.js",
+    "dist:verify": "node scripts/verify-release-assets.js"
   },
   "build": {
     "appId": "io.github.leenixp.codex-switch",
@@ -70,10 +77,6 @@
           "arch": ["universal"]
         },
         {
-          "target": "tar.gz",
-          "arch": ["universal"]
-        },
-        {
           "target": "zip",
           "arch": ["universal"]
         }
@@ -87,13 +90,6 @@
       "target": [
         {
           "target": "AppImage",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
-        },
-        {
-          "target": "deb",
           "arch": [
             "x64",
             "arm64"

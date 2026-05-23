@@ -18,7 +18,11 @@ async function orchestrate(req, res, requestBody, provider, settings) {
   if (!adapter) {
     log.error("Unsupported protocol: " + provider.protocol, { provider: provider.name, requestId: responseId });
     res.writeHead(400, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: { message: "Unsupported protocol: " + provider.protocol, type: "invalid_request_error", code: "unsupported_protocol" } }));
+    res.end(
+      JSON.stringify({
+        error: { message: "Unsupported protocol: " + provider.protocol, type: "invalid_request_error", code: "unsupported_protocol" },
+      }),
+    );
     return;
   }
 
@@ -29,26 +33,50 @@ async function orchestrate(req, res, requestBody, provider, settings) {
     log.info("Trace enabled — writing to trace directory", { provider: provider.name, requestId: responseId });
   }
 
-  log.debug("Input items: " + (requestBody.input ? requestBody.input.length : 0) + " | tools: " + (requestBody.tools ? requestBody.tools.length : 0), { provider: provider.name, requestId: responseId });
+  log.debug(
+    "Input items: " +
+      (requestBody.input ? requestBody.input.length : 0) +
+      " | tools: " +
+      (requestBody.tools ? requestBody.tools.length : 0),
+    { provider: provider.name, requestId: responseId },
+  );
 
   const upstreamRequest = adapter.buildUpstreamRequest(requestBody, provider, settings);
 
-  log.debug("Upstream messages: " + (upstreamRequest.messages ? upstreamRequest.messages.length : 0) + " | model=" + upstreamRequest.model + " | stream=" + upstreamRequest.stream, { provider: provider.name, requestId: responseId });
+  log.debug(
+    "Upstream messages: " +
+      (upstreamRequest.messages ? upstreamRequest.messages.length : 0) +
+      " | model=" +
+      upstreamRequest.model +
+      " | stream=" +
+      upstreamRequest.stream,
+    { provider: provider.name, requestId: responseId },
+  );
 
   // Run vendor preset hooks (e.g. DeepSeek reasoning_content passthrough)
   const hooks = getHooks(provider);
   if (hooks && hooks.onMessagesBuilt) {
-    upstreamRequest.messages = hooks.onMessagesBuilt(
-      upstreamRequest.messages, requestBody, provider
-    );
+    upstreamRequest.messages = hooks.onMessagesBuilt(upstreamRequest.messages, requestBody, provider);
   }
+
+  // Let hooks modify the upstream payload (e.g. Kimi forces temperature=1.0)
+  if (hooks && hooks.onUpstreamPayload) {
+    hooks.onUpstreamPayload(upstreamRequest, provider);
+  }
+
+  if (trace) trace.logUpstream(upstreamRequest);
 
   if (stream) {
     const bridge = createSseBridge(res, responseId, model, trace);
     try {
-      await adapter.streamUpstream(upstreamRequest, provider, (event) => {
-        bridge.handleEvent(event);
-      }, trace);
+      await adapter.streamUpstream(
+        upstreamRequest,
+        provider,
+        (event) => {
+          bridge.handleEvent(event);
+        },
+        trace,
+      );
       log.info("Stream done — " + provider.name + " | model=" + model, { provider: provider.name, requestId: responseId });
     } catch (err) {
       log.error("Stream failed: " + err.message, { provider: provider.name, requestId: responseId });
@@ -58,6 +86,7 @@ async function orchestrate(req, res, requestBody, provider, settings) {
     }
   } else {
     try {
+      if (trace) trace.logUpstream(upstreamRequest);
       const result = await adapter.callUpstream(upstreamRequest, provider, trace);
       const response = buildSyncResponse(responseId, model, result);
       if (trace) {

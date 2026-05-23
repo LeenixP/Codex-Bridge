@@ -22,13 +22,15 @@ function testOpenAIMultimodalImage() {
   console.log("\n[Test] OpenAI Chat image_url conversion");
   const requestBody = {
     model: "gpt-4o",
-    input: [{
-      role: "user",
-      content: [
-        { type: "input_text", text: "What's in this image?" },
-        { type: "input_image", image_url: "https://example.com/photo.jpg" },
-      ],
-    }],
+    input: [
+      {
+        role: "user",
+        content: [
+          { type: "input_text", text: "What's in this image?" },
+          { type: "input_image", image_url: "https://example.com/photo.jpg" },
+        ],
+      },
+    ],
     stream: false,
   };
   const payload = buildUpstreamRequest(requestBody, { model: "gpt-4o" }, {});
@@ -46,13 +48,15 @@ function testOpenAIMultimodalBase64Image() {
   console.log("\n[Test] OpenAI Chat base64 image conversion");
   const requestBody = {
     model: "gpt-4o",
-    input: [{
-      role: "user",
-      content: [
-        { type: "input_text", text: "Describe" },
-        { type: "input_image", image_url: "data:image/png;base64,iVBORw0KGgo=" },
-      ],
-    }],
+    input: [
+      {
+        role: "user",
+        content: [
+          { type: "input_text", text: "Describe" },
+          { type: "input_image", image_url: "data:image/png;base64,iVBORw0KGgo=" },
+        ],
+      },
+    ],
     stream: false,
   };
   const payload = buildUpstreamRequest(requestBody, { model: "gpt-4o" }, {});
@@ -66,10 +70,12 @@ function testOpenAIPlainTextShortcut() {
   console.log("\n[Test] OpenAI Chat single text part flattens to string");
   const requestBody = {
     model: "gpt-4o",
-    input: [{
-      role: "user",
-      content: [{ type: "input_text", text: "Hello" }],
-    }],
+    input: [
+      {
+        role: "user",
+        content: [{ type: "input_text", text: "Hello" }],
+      },
+    ],
     stream: false,
   };
   const payload = buildUpstreamRequest(requestBody, { model: "gpt-4o" }, {});
@@ -84,13 +90,15 @@ function testAnthropicMultimodalImage() {
   console.log("\n[Test] Anthropic image source conversion");
   const requestBody = {
     model: "claude-sonnet-4-20250514",
-    input: [{
-      role: "user",
-      content: [
-        { type: "input_text", text: "What's in this image?" },
-        { type: "input_image", image_url: "data:image/jpeg;base64,/9j/4AAQ=" },
-      ],
-    }],
+    input: [
+      {
+        role: "user",
+        content: [
+          { type: "input_text", text: "What's in this image?" },
+          { type: "input_image", image_url: "data:image/jpeg;base64,/9j/4AAQ=" },
+        ],
+      },
+    ],
     stream: false,
   };
   const req = anthropic.buildUpstreamRequest(requestBody, { model: "claude-sonnet-4-20250514" }, {});
@@ -110,13 +118,15 @@ function testAnthropicSkipsNonDataUri() {
   console.log("\n[Test] Anthropic skips non-data-URI images");
   const requestBody = {
     model: "claude-sonnet-4-20250514",
-    input: [{
-      role: "user",
-      content: [
-        { type: "input_text", text: "Hi" },
-        { type: "input_image", image_url: "https://example.com/photo.jpg" },
-      ],
-    }],
+    input: [
+      {
+        role: "user",
+        content: [
+          { type: "input_text", text: "Hi" },
+          { type: "input_image", image_url: "https://example.com/photo.jpg" },
+        ],
+      },
+    ],
     stream: false,
   };
   const req = anthropic.buildUpstreamRequest(requestBody, { model: "claude-sonnet-4-20250514" }, {});
@@ -217,37 +227,61 @@ function testAnthropicSystemMerged() {
 
 function testAnthropicThinkingLow() {
   console.log("\n[Test] Anthropic thinking budget: low");
-  const req = anthropic.buildUpstreamRequest({
-    model: "claude-sonnet-4-20250514", input: "Hi", stream: false,
-    reasoning: { effort: "low" },
-  }, { model: "claude-sonnet-4-20250514" }, {});
+  const req = anthropic.buildUpstreamRequest(
+    {
+      model: "claude-sonnet-4-20250514",
+      input: "Hi",
+      stream: false,
+      reasoning: { effort: "low" },
+    },
+    { model: "claude-sonnet-4-20250514" },
+    {},
+  );
   assert(req.thinking.budget_tokens === 2000, "low budget = 2000");
 }
 
 function testAnthropicThinkingHigh() {
   console.log("\n[Test] Anthropic thinking budget: high");
-  const req = anthropic.buildUpstreamRequest({
-    model: "claude-sonnet-4-20250514", input: "Hi", stream: false,
-    reasoning: { effort: "high" },
-  }, { model: "claude-sonnet-4-20250514" }, {});
+  const req = anthropic.buildUpstreamRequest(
+    {
+      model: "claude-sonnet-4-20250514",
+      input: "Hi",
+      stream: false,
+      reasoning: { effort: "high" },
+    },
+    { model: "claude-sonnet-4-20250514" },
+    {},
+  );
   assert(req.thinking.budget_tokens === 16000, "high budget = 16000");
 }
 
 function testAnthropicThinkingXhigh() {
   console.log("\n[Test] Anthropic thinking budget: xhigh capped");
-  const req = anthropic.buildUpstreamRequest({
-    model: "claude-sonnet-4-20250514", input: "Hi", stream: false,
-    max_output_tokens: 8192,
-    reasoning: { effort: "xhigh" },
-  }, { model: "claude-sonnet-4-20250514" }, {});
+  const req = anthropic.buildUpstreamRequest(
+    {
+      model: "claude-sonnet-4-20250514",
+      input: "Hi",
+      stream: false,
+      max_output_tokens: 8192,
+      reasoning: { effort: "xhigh" },
+    },
+    { model: "claude-sonnet-4-20250514" },
+    {},
+  );
   assert(req.thinking.budget_tokens === 8191, "xhigh budget = max_tokens - 1 (capped at 32000)");
 }
 
 function testAnthropicNoThinking() {
   console.log("\n[Test] Anthropic no thinking when reasoning absent");
-  const req = anthropic.buildUpstreamRequest({
-    model: "claude-sonnet-4-20250514", input: "Hi", stream: false,
-  }, { model: "claude-sonnet-4-20250514" }, {});
+  const req = anthropic.buildUpstreamRequest(
+    {
+      model: "claude-sonnet-4-20250514",
+      input: "Hi",
+      stream: false,
+    },
+    { model: "claude-sonnet-4-20250514" },
+    {},
+  );
   assert(req.thinking === undefined, "no thinking block without reasoning config");
 }
 
@@ -259,12 +293,14 @@ function testAnthropicToolConversion() {
     model: "claude-sonnet-4-20250514",
     input: "What's the weather?",
     stream: false,
-    tools: [{
-      type: "function",
-      name: "get_weather",
-      description: "Get current weather",
-      parameters: { type: "object", properties: { city: { type: "string" } }, required: ["city"] },
-    }],
+    tools: [
+      {
+        type: "function",
+        name: "get_weather",
+        description: "Get current weather",
+        parameters: { type: "object", properties: { city: { type: "string" } }, required: ["city"] },
+      },
+    ],
   };
   const req = anthropic.buildUpstreamRequest(requestBody, { model: "claude-sonnet-4-20250514" }, {});
   assert(Array.isArray(req.tools) && req.tools.length === 1, "has one tool");
@@ -277,9 +313,7 @@ function testAnthropicFunctionCallConversion() {
   console.log("\n[Test] Anthropic function_call → tool_use conversion");
   const requestBody = {
     model: "claude-sonnet-4-20250514",
-    input: [
-      { type: "function_call", call_id: "call_123", name: "get_weather", arguments: '{"city":"London"}' },
-    ],
+    input: [{ type: "function_call", call_id: "call_123", name: "get_weather", arguments: '{"city":"London"}' }],
     stream: false,
   };
   const req = anthropic.buildUpstreamRequest(requestBody, { model: "claude-sonnet-4-20250514" }, {});

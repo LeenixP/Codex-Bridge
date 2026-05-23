@@ -34,7 +34,9 @@ function createMockErrorServer(mode, options) {
   return new Promise((resolve) => {
     mockServer = http.createServer((req, res) => {
       let _body = "";
-      req.on("data", (chunk) => { _body += chunk; });
+      req.on("data", (chunk) => {
+        _body += chunk;
+      });
       req.on("end", () => {
         if (mode === "status") {
           res.writeHead(options.statusCode || 500, { "Content-Type": "application/json" });
@@ -60,7 +62,11 @@ function createMockErrorServer(mode, options) {
         } else if (mode === "stream-tool-calls") {
           res.writeHead(200, { "Content-Type": "text/event-stream" });
           const chunks = [
-            { choices: [{ delta: { tool_calls: [{ index: 0, id: "call_01", function: { name: "get_weather", arguments: "" } }] }, index: 0 }] },
+            {
+              choices: [
+                { delta: { tool_calls: [{ index: 0, id: "call_01", function: { name: "get_weather", arguments: "" } }] }, index: 0 },
+              ],
+            },
             { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '{"city":"Beijing"}' } }] }, index: 0 }] },
             { choices: [{ delta: {}, index: 0, finish_reason: "tool_calls" }] },
           ];
@@ -83,7 +89,9 @@ function httpRequest(options, body) {
   return new Promise((resolve, reject) => {
     const req = http.request(options, (res) => {
       let data = "";
-      res.on("data", (chunk) => { data += chunk; });
+      res.on("data", (chunk) => {
+        data += chunk;
+      });
       res.on("end", () => resolve({ status: res.statusCode, headers: res.headers, body: data }));
     });
     req.on("error", (err) => {
@@ -105,7 +113,9 @@ function parseSSEEvents(raw) {
     if (line.startsWith("data: ")) {
       const payload = line.slice(6).trim();
       if (payload === "[DONE]") continue;
-      try { events.push(JSON.parse(payload)); } catch {}
+      try {
+        events.push(JSON.parse(payload));
+      } catch {}
     }
   }
   return events;
@@ -122,10 +132,16 @@ async function testSyncUpstream400() {
   await stopMockAndCreate("status", { statusCode: 400, message: "Bad request from upstream" });
 
   const body = JSON.stringify({ model: "gpt-4o", input: "hi", stream: false });
-  const res = await httpRequest({
-    hostname: "127.0.0.1", port: PROXY_PORT, path: "/v1/responses", method: "POST",
-    headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
-  }, body);
+  const res = await httpRequest(
+    {
+      hostname: "127.0.0.1",
+      port: PROXY_PORT,
+      path: "/v1/responses",
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+    },
+    body,
+  );
   assert(res.status === 400, "Status 400 proxied (not 502)");
   const data = JSON.parse(res.body);
   assert(data.error !== undefined, "error object present");
@@ -137,10 +153,16 @@ async function testSyncUpstream500() {
   await stopMockAndCreate("status", { statusCode: 500, message: "Internal server error" });
 
   const body = JSON.stringify({ model: "gpt-4o", input: "hi", stream: false });
-  const res = await httpRequest({
-    hostname: "127.0.0.1", port: PROXY_PORT, path: "/v1/responses", method: "POST",
-    headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
-  }, body);
+  const res = await httpRequest(
+    {
+      hostname: "127.0.0.1",
+      port: PROXY_PORT,
+      path: "/v1/responses",
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+    },
+    body,
+  );
   assert(res.status === 500, "Status 500 proxied (not 502)");
 }
 
@@ -149,10 +171,16 @@ async function testSyncUpstream401() {
   await stopMockAndCreate("status", { statusCode: 401, message: "Unauthorized" });
 
   const body = JSON.stringify({ model: "gpt-4o", input: "hi", stream: false });
-  const res = await httpRequest({
-    hostname: "127.0.0.1", port: PROXY_PORT, path: "/v1/responses", method: "POST",
-    headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
-  }, body);
+  const res = await httpRequest(
+    {
+      hostname: "127.0.0.1",
+      port: PROXY_PORT,
+      path: "/v1/responses",
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+    },
+    body,
+  );
   assert(res.status === 401, "Status 401 proxied (not 502)");
 }
 
@@ -161,10 +189,16 @@ async function testStreamInterruption() {
   await stopMockAndCreate("stream-abort", {});
 
   const body = JSON.stringify({ model: "gpt-4o", input: "hi", stream: true });
-  const res = await httpRequest({
-    hostname: "127.0.0.1", port: PROXY_PORT, path: "/v1/responses", method: "POST",
-    headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
-  }, body);
+  const res = await httpRequest(
+    {
+      hostname: "127.0.0.1",
+      port: PROXY_PORT,
+      path: "/v1/responses",
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+    },
+    body,
+  );
 
   // The response should still be SSE but end with a failed event
   const events = parseSSEEvents(res.body);
@@ -181,10 +215,16 @@ async function testCorruptSseChunks() {
   await stopMockAndCreate("corrupt-sse", {});
 
   const body = JSON.stringify({ model: "gpt-4o", input: "hi", stream: true });
-  const res = await httpRequest({
-    hostname: "127.0.0.1", port: PROXY_PORT, path: "/v1/responses", method: "POST",
-    headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
-  }, body);
+  const res = await httpRequest(
+    {
+      hostname: "127.0.0.1",
+      port: PROXY_PORT,
+      path: "/v1/responses",
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+    },
+    body,
+  );
 
   const events = parseSSEEvents(res.body);
   const deltas = events.filter((e) => e.type === "response.output_text.delta").map((e) => e.delta);
@@ -199,14 +239,21 @@ async function testOpenAIToolCalls() {
   await stopMockAndCreate("stream-tool-calls", {});
 
   const body = JSON.stringify({
-    model: "gpt-4o", input: "What's the weather?",
+    model: "gpt-4o",
+    input: "What's the weather?",
     stream: true,
     tools: [{ type: "function", name: "get_weather", description: "Get weather", parameters: {} }],
   });
-  const res = await httpRequest({
-    hostname: "127.0.0.1", port: PROXY_PORT, path: "/v1/responses", method: "POST",
-    headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
-  }, body);
+  const res = await httpRequest(
+    {
+      hostname: "127.0.0.1",
+      port: PROXY_PORT,
+      path: "/v1/responses",
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+    },
+    body,
+  );
 
   const events = parseSSEEvents(res.body);
   const types = events.map((e) => e.type);
@@ -226,19 +273,31 @@ async function testAnthropicSyncError() {
   console.log("\n[Test] Anthropic sync upstream error");
   await stopMockAndCreate("status", { statusCode: 429, message: "Rate limited" });
 
-  const providers = [{
-    name: "Error Anth", protocol: "anthropic",
-    baseUrl: "http://127.0.0.1:" + MOCK_PORT, apiKey: "tk", model: "claude-sonnet-4-20250514", active: true,
-  }];
+  const providers = [
+    {
+      name: "Error Anth",
+      protocol: "anthropic",
+      baseUrl: "http://127.0.0.1:" + MOCK_PORT,
+      apiKey: "tk",
+      model: "claude-sonnet-4-20250514",
+      active: true,
+    },
+  ];
   await stopProxyServer();
   await createProxyServer({ port: PROXY_PORT, host: "127.0.0.1" }, providers);
   await delay(200);
 
   const body = JSON.stringify({ model: "claude-sonnet-4-20250514", input: "hi", stream: false });
-  const res = await httpRequest({
-    hostname: "127.0.0.1", port: PROXY_PORT, path: "/v1/responses", method: "POST",
-    headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
-  }, body);
+  const res = await httpRequest(
+    {
+      hostname: "127.0.0.1",
+      port: PROXY_PORT,
+      path: "/v1/responses",
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+    },
+    body,
+  );
   assert(res.status === 429, "Status 429 proxied");
 }
 
@@ -246,19 +305,31 @@ async function testAnthropicStreamInterruption() {
   console.log("\n[Test] Anthropic stream interruption emits error");
   await stopMockAndCreate("stream-abort", {});
 
-  const providers = [{
-    name: "StreamErr Anth", protocol: "anthropic",
-    baseUrl: "http://127.0.0.1:" + MOCK_PORT, apiKey: "tk", model: "claude-sonnet-4-20250514", active: true,
-  }];
+  const providers = [
+    {
+      name: "StreamErr Anth",
+      protocol: "anthropic",
+      baseUrl: "http://127.0.0.1:" + MOCK_PORT,
+      apiKey: "tk",
+      model: "claude-sonnet-4-20250514",
+      active: true,
+    },
+  ];
   await stopProxyServer();
   await createProxyServer({ port: PROXY_PORT, host: "127.0.0.1" }, providers);
   await delay(200);
 
   const body = JSON.stringify({ model: "claude-sonnet-4-20250514", input: "hi", stream: true });
-  const res = await httpRequest({
-    hostname: "127.0.0.1", port: PROXY_PORT, path: "/v1/responses", method: "POST",
-    headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
-  }, body);
+  const res = await httpRequest(
+    {
+      hostname: "127.0.0.1",
+      port: PROXY_PORT,
+      path: "/v1/responses",
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+    },
+    body,
+  );
 
   const events = parseSSEEvents(res.body);
   const types = events.map((e) => e.type);
@@ -273,10 +344,16 @@ async function stopMockAndCreate(mode, options) {
   await createMockErrorServer(mode, options);
   // Restart proxy with updated mock port (default openai-chat; Anthropic tests override below)
   await stopProxyServer();
-  const providers = [{
-    name: "Error Test", protocol: "openai-chat",
-    baseUrl: "http://127.0.0.1:" + MOCK_PORT + "/v1", apiKey: "tk", model: "gpt-4o", active: true,
-  }];
+  const providers = [
+    {
+      name: "Error Test",
+      protocol: "openai-chat",
+      baseUrl: "http://127.0.0.1:" + MOCK_PORT + "/v1",
+      apiKey: "tk",
+      model: "gpt-4o",
+      active: true,
+    },
+  ];
   await createProxyServer({ port: PROXY_PORT, host: "127.0.0.1" }, providers);
   await delay(100);
 }
@@ -288,10 +365,16 @@ async function main() {
   PROXY_PORT = await getAvailablePort();
   await createMockErrorServer("status", { statusCode: 200, message: "ok" });
   console.log("[Setup] Mock error server on port " + MOCK_PORT);
-  const providers = [{
-    name: "Error Test", protocol: "openai-chat",
-    baseUrl: "http://127.0.0.1:" + MOCK_PORT + "/v1", apiKey: "tk", model: "gpt-4o", active: true,
-  }];
+  const providers = [
+    {
+      name: "Error Test",
+      protocol: "openai-chat",
+      baseUrl: "http://127.0.0.1:" + MOCK_PORT + "/v1",
+      apiKey: "tk",
+      model: "gpt-4o",
+      active: true,
+    },
+  ];
   await createProxyServer({ port: PROXY_PORT, host: "127.0.0.1" }, providers);
   await delay(300);
   console.log("[Setup] Proxy server on port " + PROXY_PORT);

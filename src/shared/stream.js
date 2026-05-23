@@ -16,16 +16,17 @@ async function* parseSSEStream(body) {
     for (const line of lines) {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith(":")) continue;
-      if (trimmed.startsWith("data: ")) {
-        const payload = trimmed.slice(6).trim();
+      if (trimmed.startsWith("data:")) {
+        // Support both "data: " (standard) and "data:" (Kimi, etc.)
+        const payload = trimmed.startsWith("data: ") ? trimmed.slice(6).trim() : trimmed.slice(5).trim();
         if (payload) yield payload;
       }
     }
   }
   if (buffer.trim()) {
     const trimmed = buffer.trim();
-    if (trimmed.startsWith("data: ")) {
-      yield trimmed.slice(6).trim();
+    if (trimmed.startsWith("data:")) {
+      yield trimmed.startsWith("data: ") ? trimmed.slice(6).trim() : trimmed.slice(5).trim();
     }
   }
 }

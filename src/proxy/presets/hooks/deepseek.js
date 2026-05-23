@@ -103,6 +103,13 @@ function onMessagesBuilt(messages, requestBody, provider) {
     lastRole = role;
   }
 
+  // Verify mapping consistency
+  var expectedMsgCount = inputToMsg[inputToMsg.length - 1] !== undefined ? inputToMsg[inputToMsg.length - 1] + 1 : 0;
+  if (expectedMsgCount !== messages.length) {
+    log.warn("[deepseek-hook] inputToMsg mapping mismatch: expected " + expectedMsgCount + " messages but got " + messages.length + ". Skipping thinking block injection.");
+    return messages;
+  }
+
   // 3. Inject thinking blocks into the correct assistant messages.
   let injectedBlocks = 0;
   for (let p = 0; p < pairs.length; p++) {
@@ -124,31 +131,30 @@ function onMessagesBuilt(messages, requestBody, provider) {
 
     const m = inputToMsg[targetIdx];
     if (m === null || m === undefined || m < 0 || m >= messages.length) {
-      log.warn(
-        "[deepseek] target out of bounds: inputIdx=" + targetIdx + " → msgIdx=" + m +
-        " (total " + messages.length + " msgs)",
-        { provider: provider.name }
-      );
+      log.warn("[deepseek] target out of bounds: inputIdx=" + targetIdx + " → msgIdx=" + m + " (total " + messages.length + " msgs)", {
+        provider: provider.name,
+      });
       dumpInputStructure(inputItems, messages, provider);
       continue;
     }
 
     if (messages[m].role !== "assistant") {
-      let found = false;
-      for (let fwd = m + 1; fwd < messages.length; fwd++) {
+      var found = false;
+      for (var fwd = m + 1; fwd < messages.length; fwd++) {
         if (messages[fwd].role === "assistant") {
           injectIntoMessage(messages[fwd], blocks, provider.protocol);
           injectedBlocks += blocks.length;
           found = true;
           break;
         }
+        if (messages[fwd].role === "user") {
+          log.debug("[deepseek-hook] forward search crossed user boundary without assistant match");
+        }
       }
       if (!found) {
-        log.warn(
-          "[deepseek] target msgIdx=" + m + " is " + messages[m].role +
-          ", no trailing assistant found",
-          { provider: provider.name }
-        );
+        log.warn("[deepseek] target msgIdx=" + m + " is " + messages[m].role + ", no trailing assistant found", {
+          provider: provider.name,
+        });
         dumpInputStructure(inputItems, messages, provider);
       }
     } else {
@@ -158,45 +164,59 @@ function onMessagesBuilt(messages, requestBody, provider) {
   }
 
   // 4. Diagnostic logging.
-  const totalAssistant = messages.reduce(function (c, msg) { return c + (msg.role === "assistant" ? 1 : 0); }, 0);
+  const totalAssistant = messages.reduce(function (c, msg) {
+    return c + (msg.role === "assistant" ? 1 : 0);
+  }, 0);
 
   const totalReasoningItems = pairs.length;
-  const totalSummaries = pairs.reduce(function (c, p) { return c + p.blocks.length; }, 0);
+  const totalSummaries = pairs.reduce(function (c, p) {
+    return c + p.blocks.length;
+  }, 0);
 
   // Dump reasoning→target pairing at debug level
   if (totalReasoningItems > 0) {
     const pairLines = pairs.map(function (p, idx) {
       const m = p.targetIdx >= 0 ? inputToMsg[p.targetIdx] : -1;
-      const role = (m >= 0 && m < messages.length) ? messages[m].role : "?";
+      const role = m >= 0 && m < messages.length ? messages[m].role : "?";
       return "  reasoning[" + idx + "] → input[" + p.targetIdx + "] → msg[" + m + "](" + role + ") blocks=" + p.blocks.length;
     });
-    log.debug(
-      "[deepseek] pairings:\n" + pairLines.join("\n"),
-      { provider: provider.name }
-    );
+    log.debug("[deepseek] pairings:\n" + pairLines.join("\n"), { provider: provider.name });
   }
 
   log.debug(
-    "[deepseek] scan: " + totalReasoningItems + " reasoning items (" + totalSummaries +
-    " summaries) → " + injectedBlocks + " thinking blocks injected | " +
-    totalAssistant + " assistant msgs in " + messages.length + " total | " +
-    inputItems.length + " input items",
-    { provider: provider.name }
+    "[deepseek] scan: " +
+      totalReasoningItems +
+      " reasoning items (" +
+      totalSummaries +
+      " summaries) → " +
+      injectedBlocks +
+      " thinking blocks injected | " +
+      totalAssistant +
+      " assistant msgs in " +
+      messages.length +
+      " total | " +
+      inputItems.length +
+      " input items",
+    { provider: provider.name },
   );
 
   if (injectedBlocks > 0) {
     log.info(
-      "[deepseek] reasoning injected: " + totalSummaries + " summaries → " +
-      injectedBlocks + " thinking blocks across " + totalAssistant + " assistant msgs → " +
-      provider.protocol,
-      { provider: provider.name }
+      "[deepseek] reasoning injected: " +
+        totalSummaries +
+        " summaries → " +
+        injectedBlocks +
+        " thinking blocks across " +
+        totalAssistant +
+        " assistant msgs → " +
+        provider.protocol,
+      { provider: provider.name },
     );
     dumpThinkingBlocks(messages, provider);
   } else if (totalAssistant > 0) {
     log.warn(
-      "[deepseek] expected reasoning but injected 0 (" + totalReasoningItems +
-      " reasoning items, " + totalAssistant + " assistant msgs)",
-      { provider: provider.name }
+      "[deepseek] expected reasoning but injected 0 (" + totalReasoningItems + " reasoning items, " + totalAssistant + " assistant msgs)",
+      { provider: provider.name },
     );
     dumpInputStructure(inputItems, messages, provider);
   }
@@ -251,7 +271,11 @@ function injectIntoMessage(msg, thinkingBlocks, protocol) {
   } else {
     // openai-chat protocol: overwrite (not append) so the hook's
     // per-summary processing replaces the adapter's simpler concatenation
-    msg.reasoning_content = thinkingBlocks.map(function (b) { return b.thinking; }).join("\n");
+    msg.reasoning_content = thinkingBlocks
+      .map(function (b) {
+        return b.thinking;
+      })
+      .join("\n");
   }
 }
 
@@ -271,7 +295,7 @@ function dumpThinkingBlocks(messages, provider) {
     }
     const blocks = content.map(function (b) {
       if (b.type === "thinking") {
-        const txt = (b.thinking || "");
+        const txt = b.thinking || "";
         const prefix = txt.length > 60 ? txt.slice(0, 60) + "..." : txt;
         return "thinking(len=" + txt.length + ",sig=" + (b.signature ? "yes" : "NO") + ") " + prefix;
       }
@@ -284,10 +308,7 @@ function dumpThinkingBlocks(messages, provider) {
     });
     lines.push("  msg[" + m + "] assistant: [" + blocks.join(", ") + "]");
   }
-  log.debug(
-    "[deepseek] thinking dump (" + messages.length + " msgs):\n" + lines.join("\n"),
-    { provider: provider.name }
-  );
+  log.debug("[deepseek] thinking dump (" + messages.length + " msgs):\n" + lines.join("\n"), { provider: provider.name });
 }
 
 function dumpInputStructure(inputItems, messages, provider) {
@@ -301,8 +322,12 @@ function dumpInputStructure(inputItems, messages, provider) {
     const type = it.type || (it.role ? "role:" + it.role : "?");
     let extra = "";
     if (it.type === "reasoning") {
-      const summaries = Array.isArray(it.summary) ? it.summary : (it.summary ? [it.summary] : []);
-      const lens = summaries.map(function (s) { return (s.text || "").length; }).join(",");
+      const summaries = Array.isArray(it.summary) ? it.summary : it.summary ? [it.summary] : [];
+      const lens = summaries
+        .map(function (s) {
+          return (s.text || "").length;
+        })
+        .join(",");
       extra = " summaries=" + summaries.length + " lens=[" + lens + "]";
     } else if (it.type === "function_call") {
       extra = " name=" + (it.name || "?") + " call_id=" + (it.call_id || it.id || "?");
@@ -314,9 +339,15 @@ function dumpInputStructure(inputItems, messages, provider) {
     parts.push("[" + i + "] " + type + extra);
   }
   log.debug(
-    "[deepseek] input dump (" + inputItems.length + " items → " + messages.length +
-    " msgs, protocol=" + provider.protocol + "):\n  " + parts.join("\n  "),
-    { provider: provider.name }
+    "[deepseek] input dump (" +
+      inputItems.length +
+      " items → " +
+      messages.length +
+      " msgs, protocol=" +
+      provider.protocol +
+      "):\n  " +
+      parts.join("\n  "),
+    { provider: provider.name },
   );
 }
 

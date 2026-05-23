@@ -34,14 +34,25 @@ function createMockAnthropicServer() {
   return new Promise((resolve) => {
     mockServer = http.createServer((req, res) => {
       let _body = "";
-      req.on("data", (chunk) => { _body += chunk; });
+      req.on("data", (chunk) => {
+        _body += chunk;
+      });
       req.on("end", () => {
         const data = JSON.parse(_body);
 
         if (data.stream) {
           res.writeHead(200, { "Content-Type": "text/event-stream" });
           const events = [
-            { type: "message_start", message: { id: "msg_01", type: "message", role: "assistant", model: "claude-sonnet-4-20250514", usage: { input_tokens: 25, output_tokens: 0 } } },
+            {
+              type: "message_start",
+              message: {
+                id: "msg_01",
+                type: "message",
+                role: "assistant",
+                model: "claude-sonnet-4-20250514",
+                usage: { input_tokens: 25, output_tokens: 0 },
+              },
+            },
             { type: "content_block_start", index: 0, content_block: { type: "thinking", thinking: "" } },
             { type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "Let me think" } },
             { type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: " about this." } },
@@ -60,17 +71,19 @@ function createMockAnthropicServer() {
           res.end();
         } else {
           res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({
-            id: "msg_01",
-            type: "message",
-            role: "assistant",
-            model: "claude-sonnet-4-20250514",
-            content: [
-              { type: "thinking", thinking: "Let me think about this." },
-              { type: "text", text: "Hello from Claude" },
-            ],
-            usage: { input_tokens: 25, output_tokens: 12 },
-          }));
+          res.end(
+            JSON.stringify({
+              id: "msg_01",
+              type: "message",
+              role: "assistant",
+              model: "claude-sonnet-4-20250514",
+              content: [
+                { type: "thinking", thinking: "Let me think about this." },
+                { type: "text", text: "Hello from Claude" },
+              ],
+              usage: { input_tokens: 25, output_tokens: 12 },
+            }),
+          );
         }
       });
     });
@@ -85,7 +98,9 @@ function httpRequest(options, body) {
   return new Promise((resolve, reject) => {
     const req = http.request(options, (res) => {
       let data = "";
-      res.on("data", (chunk) => { data += chunk; });
+      res.on("data", (chunk) => {
+        data += chunk;
+      });
       res.on("end", () => resolve({ status: res.statusCode, headers: res.headers, body: data }));
     });
     req.on("error", reject);
@@ -101,7 +116,9 @@ function parseSSEEvents(raw) {
     if (line.startsWith("data: ")) {
       const payload = line.slice(6).trim();
       if (payload === "[DONE]") continue;
-      try { events.push(JSON.parse(payload)); } catch {}
+      try {
+        events.push(JSON.parse(payload));
+      } catch {}
     }
   }
   return events;
@@ -120,13 +137,16 @@ async function testAnthropicSync() {
     stream: false,
     reasoning: { effort: "medium" },
   });
-  const res = await httpRequest({
-    hostname: "127.0.0.1",
-    port: PROXY_PORT,
-    path: "/v1/responses",
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
-  }, body);
+  const res = await httpRequest(
+    {
+      hostname: "127.0.0.1",
+      port: PROXY_PORT,
+      path: "/v1/responses",
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+    },
+    body,
+  );
   const data = JSON.parse(res.body);
   assert(res.status === 200, "Status 200");
   assert(data.status === "completed", "status completed");
@@ -149,13 +169,16 @@ async function testAnthropicStream() {
     stream: true,
     reasoning: { effort: "high" },
   });
-  const res = await httpRequest({
-    hostname: "127.0.0.1",
-    port: PROXY_PORT,
-    path: "/v1/responses",
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
-  }, body);
+  const res = await httpRequest(
+    {
+      hostname: "127.0.0.1",
+      port: PROXY_PORT,
+      path: "/v1/responses",
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+    },
+    body,
+  );
   assert(res.status === 200, "Status 200");
   assert(res.headers["content-type"].includes("text/event-stream"), "Content-Type is SSE");
 
@@ -168,14 +191,10 @@ async function testAnthropicStream() {
   assert(types.includes("response.output_text.delta"), "has text delta");
   assert(types.includes("response.completed"), "has response.completed");
 
-  const reasoningDeltas = events
-    .filter((e) => e.type === "response.reasoning_summary_text.delta")
-    .map((e) => e.delta);
+  const reasoningDeltas = events.filter((e) => e.type === "response.reasoning_summary_text.delta").map((e) => e.delta);
   assert(reasoningDeltas.join("") === "Let me think about this.", "reasoning text matches");
 
-  const textDeltas = events
-    .filter((e) => e.type === "response.output_text.delta")
-    .map((e) => e.delta);
+  const textDeltas = events.filter((e) => e.type === "response.output_text.delta").map((e) => e.delta);
   assert(textDeltas.join("") === "Hello from Claude", "streamed text matches");
 
   const completed = events.find((e) => e.type === "response.completed");
@@ -192,20 +211,24 @@ async function testAnthropicToolUse() {
   await new Promise((resolve) => {
     mockServer = http.createServer((req, res) => {
       let _body = "";
-      req.on("data", (chunk) => { _body += chunk; });
+      req.on("data", (chunk) => {
+        _body += chunk;
+      });
       req.on("end", () => {
         res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({
-          id: "msg_02",
-          type: "message",
-          role: "assistant",
-          model: "claude-sonnet-4-20250514",
-          content: [
-            { type: "text", text: "I'll search for that." },
-            { type: "tool_use", id: "toolu_01", name: "web_search", input: { query: "hello world" } },
-          ],
-          usage: { input_tokens: 30, output_tokens: 20 },
-        }));
+        res.end(
+          JSON.stringify({
+            id: "msg_02",
+            type: "message",
+            role: "assistant",
+            model: "claude-sonnet-4-20250514",
+            content: [
+              { type: "text", text: "I'll search for that." },
+              { type: "tool_use", id: "toolu_01", name: "web_search", input: { query: "hello world" } },
+            ],
+            usage: { input_tokens: 30, output_tokens: 20 },
+          }),
+        );
       });
     });
     mockServer.listen(0, "127.0.0.1", () => {
@@ -216,14 +239,16 @@ async function testAnthropicToolUse() {
 
   // Restart proxy with updated mock port
   await stopProxyServer();
-  const toolProviders = [{
-    name: "Test Anthropic",
-    protocol: "anthropic",
-    baseUrl: "http://127.0.0.1:" + MOCK_PORT,
-    apiKey: "test-key",
-    model: "claude-sonnet-4-20250514",
-    active: true,
-  }];
+  const toolProviders = [
+    {
+      name: "Test Anthropic",
+      protocol: "anthropic",
+      baseUrl: "http://127.0.0.1:" + MOCK_PORT,
+      apiKey: "test-key",
+      model: "claude-sonnet-4-20250514",
+      active: true,
+    },
+  ];
   await createProxyServer({ port: PROXY_PORT, host: "127.0.0.1" }, toolProviders);
   await delay(200);
 
@@ -231,15 +256,25 @@ async function testAnthropicToolUse() {
     model: "claude-sonnet-4-20250514",
     input: "Search for hello world",
     stream: false,
-    tools: [{ type: "function", name: "web_search", description: "Search the web", parameters: { type: "object", properties: { query: { type: "string" } } } }],
+    tools: [
+      {
+        type: "function",
+        name: "web_search",
+        description: "Search the web",
+        parameters: { type: "object", properties: { query: { type: "string" } } },
+      },
+    ],
   });
-  const res = await httpRequest({
-    hostname: "127.0.0.1",
-    port: PROXY_PORT,
-    path: "/v1/responses",
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
-  }, body);
+  const res = await httpRequest(
+    {
+      hostname: "127.0.0.1",
+      port: PROXY_PORT,
+      path: "/v1/responses",
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+    },
+    body,
+  );
   const data = JSON.parse(res.body);
   assert(res.status === 200, "Status 200");
   assert(data.status === "completed", "status completed");
@@ -259,14 +294,16 @@ async function main() {
   await createMockAnthropicServer();
   console.log("[Setup] Mock Anthropic server on port " + MOCK_PORT);
 
-  const providers = [{
-    name: "Test Anthropic",
-    protocol: "anthropic",
-    baseUrl: "http://127.0.0.1:" + MOCK_PORT,
-    apiKey: "test-key",
-    model: "claude-sonnet-4-20250514",
-    active: true,
-  }];
+  const providers = [
+    {
+      name: "Test Anthropic",
+      protocol: "anthropic",
+      baseUrl: "http://127.0.0.1:" + MOCK_PORT,
+      apiKey: "test-key",
+      model: "claude-sonnet-4-20250514",
+      active: true,
+    },
+  ];
 
   await createProxyServer({ port: PROXY_PORT, host: "127.0.0.1" }, providers);
   await delay(300);

@@ -1,9 +1,10 @@
 <!DOCTYPE html>
-<html lang="zh" data-theme="dark">
+<html data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self';">
+  <meta name="description" content="Codex-Switch - AI model protocol bridge proxy">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; object-src 'none'; base-uri 'none';">
   <title>Codex-Switch</title>
   <link rel="icon" href="assets/icons/app.png" type="image/png">
   <link rel="stylesheet" href="styles.css">
@@ -25,7 +26,7 @@
 
       <div class="proxy-status stopped" id="proxy-status">
         <span class="status-dot"></span>
-        <span class="status-text" data-i18n="proxyStopped">代理已停止</span>
+        <span class="status-text" aria-live="polite" data-i18n="proxyStopped">代理已停止</span>
       </div>
 
       <button class="sidebar-proxy-btn stopped" id="btn-toggle-proxy">
@@ -100,7 +101,7 @@
           <div class="panel-header"><h2 data-i18n="proxySection">代理</h2></div>
           <div class="panel-body settings-panel">
             <div class="setting-item">
-              <span data-i18n="listenPort">监听端口</span>
+              <label for="setting-port" data-i18n="listenPort">监听端口</label>
               <small data-i18n="listenPortHint" style="display:block;font-size:12px;color:var(--text-muted);margin-top:2px">修改后需重启代理。</small>
               <input type="number" id="setting-port" class="inline-control" value="8629" min="1024" max="65535" step="1" style="width: 120px;">
             </div>

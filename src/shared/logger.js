@@ -1,7 +1,8 @@
 "use strict";
 
 const LEVELS = { debug: 10, info: 20, warn: 30, error: 40 };
-const _LEVEL_NAMES = Object.keys(LEVELS); void _LEVEL_NAMES;
+const _LEVEL_NAMES = Object.keys(LEVELS);
+void _LEVEL_NAMES;
 
 let minLevel = "info";
 let logWriter = null;
@@ -40,9 +41,17 @@ function onLog(callback) {
   logWriter = callback;
 }
 
-function debug(message, meta) { log("debug", message, meta); }
-function info(message, meta) { log("info", message, meta); }
-function warn(message, meta) { log("warn", message, meta); }
-function error(message, meta) { log("error", message, meta); }
+function debug(message, meta) {
+  log("debug", message, meta);
+}
+function info(message, meta) {
+  log("info", message, meta);
+}
+function warn(message, meta) {
+  log("warn", message, meta);
+}
+function error(message, meta) {
+  log("error", message, meta);
+}
 
 module.exports = { LEVELS, setLevel, onLog, debug, info, warn, error };

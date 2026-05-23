@@ -12,7 +12,11 @@ function nowSeconds() {
 
 function createSequence() {
   let seq = 0;
-  return { next() { return ++seq; } };
+  return {
+    next() {
+      return seq++;
+    },
+  };
 }
 
 function emitSse(res, event, data) {
