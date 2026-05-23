@@ -8,7 +8,7 @@ const log = require("../../shared/logger");
 
 async function orchestrate(req, res, requestBody, provider, settings) {
   const responseId = makeId("resp");
-  const model = requestBody.model || provider.model || "unknown";
+  const model = provider.model || requestBody.model || "unknown";
   const stream = requestBody.stream !== false;
 
   log.info("Request → " + provider.name + " | model=" + model + " | stream=" + stream, { provider: provider.name, requestId: responseId });
