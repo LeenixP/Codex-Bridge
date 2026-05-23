@@ -3,7 +3,7 @@
 const { makeId, nowSeconds, createSequence, emitSse } = require("../../shared/http");
 const { EventType } = require("./events");
 
-function createSseBridge(res, responseId, model) {
+function createSseBridge(res, responseId, model, traceSession) {
   const seq = createSequence();
   const createdAt = nowSeconds();
   let outputIndex = 0;
@@ -31,12 +31,17 @@ function createSseBridge(res, responseId, model) {
     output: [],
   };
 
-  emitSse(res, "response.created", {
+  function emitToClient(eventType, data) {
+    if (traceSession) traceSession.logOutEvent(eventType, data);
+    emitSse(res, eventType, data);
+  }
+
+  emitToClient("response.created", {
     type: "response.created",
     response: responseMeta,
     sequence_number: seq.next(),
   });
-  emitSse(res, "response.in_progress", {
+  emitToClient("response.in_progress", {
     type: "response.in_progress",
     response: responseMeta,
     sequence_number: seq.next(),
@@ -73,14 +78,14 @@ function createSseBridge(res, responseId, model) {
     if (!reasoningItem) {
       closeMessage(); // flush any open message before starting a new reasoning block
       reasoningItem = { id: makeId("rs"), outputIndex: outputIndex++, text: "" };
-      emitSse(res, "response.output_item.added", {
+      emitToClient("response.output_item.added", {
         type: "response.output_item.added",
         response_id: responseId,
         output_index: reasoningItem.outputIndex,
         item: { id: reasoningItem.id, type: "reasoning", status: "in_progress", summary: [] },
         sequence_number: seq.next(),
       });
-      emitSse(res, "response.reasoning_summary_part.added", {
+      emitToClient("response.reasoning_summary_part.added", {
         type: "response.reasoning_summary_part.added",
         response_id: responseId,
         item_id: reasoningItem.id,
@@ -91,7 +96,7 @@ function createSseBridge(res, responseId, model) {
       });
     }
     reasoningItem.text += delta;
-    emitSse(res, "response.reasoning_summary_text.delta", {
+    emitToClient("response.reasoning_summary_text.delta", {
       type: "response.reasoning_summary_text.delta",
       response_id: responseId,
       item_id: reasoningItem.id,
@@ -104,7 +109,7 @@ function createSseBridge(res, responseId, model) {
 
   function closeReasoning() {
     if (!reasoningItem) return;
-    emitSse(res, "response.reasoning_summary_text.done", {
+    emitToClient("response.reasoning_summary_text.done", {
       type: "response.reasoning_summary_text.done",
       response_id: responseId,
       item_id: reasoningItem.id,
@@ -113,7 +118,7 @@ function createSseBridge(res, responseId, model) {
       text: reasoningItem.text,
       sequence_number: seq.next(),
     });
-    emitSse(res, "response.reasoning_summary_part.done", {
+    emitToClient("response.reasoning_summary_part.done", {
       type: "response.reasoning_summary_part.done",
       response_id: responseId,
       item_id: reasoningItem.id,
@@ -128,7 +133,7 @@ function createSseBridge(res, responseId, model) {
       status: "completed",
       summary: [{ type: "summary_text", text: reasoningItem.text }],
     };
-    emitSse(res, "response.output_item.done", {
+    emitToClient("response.output_item.done", {
       type: "response.output_item.done",
       response_id: responseId,
       output_index: reasoningItem.outputIndex,
@@ -143,14 +148,14 @@ function createSseBridge(res, responseId, model) {
     closeReasoning();
     if (!messageItem) {
       messageItem = { id: makeId("msg"), outputIndex: outputIndex++, text: "" };
-      emitSse(res, "response.output_item.added", {
+      emitToClient("response.output_item.added", {
         type: "response.output_item.added",
         response_id: responseId,
         output_index: messageItem.outputIndex,
         item: { id: messageItem.id, type: "message", role: "assistant", status: "in_progress", content: [] },
         sequence_number: seq.next(),
       });
-      emitSse(res, "response.content_part.added", {
+      emitToClient("response.content_part.added", {
         type: "response.content_part.added",
         response_id: responseId,
         item_id: messageItem.id,
@@ -161,7 +166,7 @@ function createSseBridge(res, responseId, model) {
       });
     }
     messageItem.text += delta;
-    emitSse(res, "response.output_text.delta", {
+    emitToClient("response.output_text.delta", {
       type: "response.output_text.delta",
       response_id: responseId,
       item_id: messageItem.id,
@@ -174,7 +179,7 @@ function createSseBridge(res, responseId, model) {
 
   function closeMessage() {
     if (!messageItem) return;
-    emitSse(res, "response.output_text.done", {
+    emitToClient("response.output_text.done", {
       type: "response.output_text.done",
       response_id: responseId,
       item_id: messageItem.id,
@@ -183,7 +188,7 @@ function createSseBridge(res, responseId, model) {
       text: messageItem.text,
       sequence_number: seq.next(),
     });
-    emitSse(res, "response.content_part.done", {
+    emitToClient("response.content_part.done", {
       type: "response.content_part.done",
       response_id: responseId,
       item_id: messageItem.id,
@@ -199,7 +204,7 @@ function createSseBridge(res, responseId, model) {
       status: "completed",
       content: [{ type: "output_text", text: messageItem.text, annotations: [] }],
     };
-    emitSse(res, "response.output_item.done", {
+    emitToClient("response.output_item.done", {
       type: "response.output_item.done",
       response_id: responseId,
       output_index: messageItem.outputIndex,
@@ -216,7 +221,7 @@ function createSseBridge(res, responseId, model) {
     const idx = outputIndex++;
     const item = { id: makeId("fc"), callId, name, outputIndex: idx, args: "" };
     toolCallItems.set(callId, item);
-    emitSse(res, "response.output_item.added", {
+    emitToClient("response.output_item.added", {
       type: "response.output_item.added",
       response_id: responseId,
       output_index: idx,
@@ -229,7 +234,7 @@ function createSseBridge(res, responseId, model) {
     const item = toolCallItems.get(callId);
     if (!item) return;
     item.args += delta;
-    emitSse(res, "response.function_call_arguments.delta", {
+    emitToClient("response.function_call_arguments.delta", {
       type: "response.function_call_arguments.delta",
       response_id: responseId,
       item_id: item.id,
@@ -243,7 +248,7 @@ function createSseBridge(res, responseId, model) {
     const item = toolCallItems.get(callId);
     if (!item) return;
     item.args = args || item.args;
-    emitSse(res, "response.function_call_arguments.done", {
+    emitToClient("response.function_call_arguments.done", {
       type: "response.function_call_arguments.done",
       response_id: responseId,
       item_id: item.id,
@@ -259,7 +264,7 @@ function createSseBridge(res, responseId, model) {
       status: "completed",
       arguments: item.args,
     };
-    emitSse(res, "response.output_item.done", {
+    emitToClient("response.output_item.done", {
       type: "response.output_item.done",
       response_id: responseId,
       output_index: item.outputIndex,
@@ -282,7 +287,7 @@ function createSseBridge(res, responseId, model) {
       output,
       usage: usage || null,
     };
-    emitSse(res, "response.completed", {
+    emitToClient("response.completed", {
       type: "response.completed",
       response,
       sequence_number: seq.next(),
@@ -303,7 +308,7 @@ function createSseBridge(res, responseId, model) {
       output,
       error: { message: message || "Unknown error", type: "api_error", code: code || "upstream_error" },
     };
-    emitSse(res, "response.failed", {
+    emitToClient("response.failed", {
       type: "response.failed",
       response,
       sequence_number: seq.next(),

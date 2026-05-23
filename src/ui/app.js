@@ -145,6 +145,10 @@
     setRadio("loglevel", settings.logLevel || "info");
     setRadio("close", settings.closeBehavior || "tray");
 
+    // Trace mode toggle
+    const traceCheckbox = document.getElementById("setting-trace");
+    if (traceCheckbox) traceCheckbox.checked = Boolean(settings.traceEnabled);
+
     applyTheme(settings.theme || "dark");
   }
 
@@ -190,6 +194,14 @@
       await api.setLogLevel(settings.logLevel);
     }
   }));
+
+  const traceCheckbox = document.getElementById("setting-trace");
+  if (traceCheckbox) {
+    traceCheckbox.addEventListener("change", async () => {
+      settings.traceEnabled = traceCheckbox.checked;
+      if (api) await api.saveSettings(settings);
+    });
+  }
 
   async function saveCurrentSettings() {
     try {
@@ -286,11 +298,12 @@
     const protocolLabel = provider.protocol === "anthropic" ? t("protocolAnthropic") : t("protocolOpenAI");
     const statusLabel = provider.active ? '<span class="status-badge active">' + t("active") + "</span>" : "";
     const presetLabel = provider.preset ? '<span class="preset-tag">' + t("presetTag") + "</span>" : "";
+    const userIdLabel = provider.userId ? '<span class="userid-badge" title="' + t("labelUserId") + '">uid: ' + escapeHtml(provider.userId) + '</span>' : '';
     return '<div class="provider-card' + activeClass + '" data-index="' + index + '">' +
       '<div class="provider-icon">' + protocolIcon(provider.protocol) + "</div>" +
       '<div class="provider-info">' +
       '<div class="provider-name">' + escapeHtml(provider.name) + " " + statusLabel + " " + presetLabel + "</div>" +
-      '<div class="provider-detail"><span class="protocol-badge">' + protocolLabel + "</span> " + escapeHtml(provider.model || "") + "</div>" +
+      '<div class="provider-detail"><span class="protocol-badge">' + protocolLabel + "</span> " + escapeHtml(provider.model || "") + " " + userIdLabel + "</div>" +
       '<div class="provider-url">' + escapeHtml(provider.baseUrl || "") + "</div>" +
       '<div class="feature-toggles">' +
       '<label class="feature-toggle" title="' + t("labelVision") + '"><label class="toggle-switch"><input type="checkbox" class="toggle-vision" data-index="' + index + '"' + (provider.vision !== false ? " checked" : "") + '><span class="slider"></span></label><span>' + t("labelVision") + "</span></label>" +
@@ -392,7 +405,7 @@
   // Add/Edit Provider Dialog
   document.getElementById("btn-add-provider").addEventListener("click", () => {
     editingIndex = -1;
-    showDialog({ title: t("dialogAddTitle"), name: "", protocol: "openai-chat", baseUrl: "", apiKey: "", model: "", vision: true, imageGen: true });
+    showDialog({ title: t("dialogAddTitle"), name: "", protocol: "openai-chat", baseUrl: "", apiKey: "", model: "", userId: "", vision: true, imageGen: true });
   });
 
   function openEditDialog(index) {
@@ -401,6 +414,7 @@
     showDialog({
       title: t("dialogEditTitle"),
       name: p.name, protocol: p.protocol, baseUrl: p.baseUrl, apiKey: p.apiKey, model: p.model,
+      userId: p.userId || "",
       vision: p.vision !== false, imageGen: p.imageGen !== false,
       preset: p.preset || "",
     });
@@ -429,6 +443,7 @@
       '<div class="form-group"><label for="dlg-baseurl">' + t("labelBaseUrl") + '</label><input type="text" id="dlg-baseurl" value="' + escapeAttr(data.baseUrl) + '" placeholder="' + t("placeholderBaseUrl") + '"></div>' +
       '<div class="form-group"><label for="dlg-apikey">' + t("labelApiKey") + '</label><input type="password" id="dlg-apikey" value="' + escapeAttr(data.apiKey) + '" placeholder="' + t("placeholderApiKey") + '"></div>' +
       '<div class="form-group"><label for="dlg-model">' + t("labelModel") + '</label><input type="text" id="dlg-model" value="' + escapeAttr(data.model) + '" placeholder="' + t("placeholderModel") + '"></div>' +
+      '<div class="form-group"><label for="dlg-userid">' + t("labelUserId") + ' <small style="color:var(--text-muted);font-weight:400">(' + t("labelUserIdHint") + ')</small></label><input type="text" id="dlg-userid" value="' + escapeAttr(data.userId || "") + '" placeholder="' + t("placeholderUserId") + '"></div>' +
       '<div class="dialog-features">' +
       '<div class="dialog-feature"><label for="dlg-vision">' + t("labelVision") + '</label><label class="toggle-switch"><input type="checkbox" id="dlg-vision"' + (data.vision !== false ? " checked" : "") + '><span class="slider"></span></label></div>' +
       '<div class="dialog-feature"><label for="dlg-imagegen">' + t("labelImageGen") + '</label><label class="toggle-switch"><input type="checkbox" id="dlg-imagegen"' + (data.imageGen !== false ? " checked" : "") + '><span class="slider"></span></label></div>' +
@@ -517,6 +532,7 @@
     const baseUrl = document.getElementById("dlg-baseurl").value.trim();
     const apiKey = document.getElementById("dlg-apikey").value.trim();
     const model = document.getElementById("dlg-model").value.trim();
+    const userId = document.getElementById("dlg-userid").value.trim();
     const vision = document.getElementById("dlg-vision").checked;
     const imageGen = document.getElementById("dlg-imagegen").checked;
 
@@ -526,6 +542,7 @@
     if (!model) { showToast(t("toastModelRequired"), "error"); return; }
 
     const entry = { name, protocol, baseUrl, apiKey, model, vision, imageGen, active: false, preset: selectedPreset || "" };
+    if (userId) entry.userId = userId;
     let wasActive = false;
     if (editingIndex >= 0) {
       wasActive = providers[editingIndex].active;

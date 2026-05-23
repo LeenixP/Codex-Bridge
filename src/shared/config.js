@@ -88,6 +88,7 @@ function loadSettings() {
     language: "zh",
     closeBehavior: "tray",
     logLevel: "info",
+    traceEnabled: false,
   };
   const saved = readJsonFile(settingsPath, {});
   return Object.assign({}, defaults, saved);

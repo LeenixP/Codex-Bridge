@@ -152,6 +152,7 @@ body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg-a
 .status-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
 .status-badge.active { background: var(--success-bg); color: var(--success); }
 .preset-tag { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 500; background: var(--primary); color: var(--primary-text); opacity: 0.65; }
+.userid-badge { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 500; background: var(--ctrl-bg); color: var(--text-secondary); border: 1px dashed var(--border-color); }
 
 .provider-actions { display: flex; gap: 6px; transition: opacity 0.15s; }
 .provider-card:focus-within .provider-actions,

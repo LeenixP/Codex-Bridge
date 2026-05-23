@@ -14,6 +14,117 @@ const {
   errorEvent,
 } = require("../core/events");
 
+// ---------------------------------------------------------------------------
+// Thinking tag stream parser (shared with openai-chat adapter)
+// ---------------------------------------------------------------------------
+const THINKING_OPEN_RE = /<\s*(think(?:ing)?|thought|reasoning)\s*>/i;
+
+function normalizeTagName(name) {
+  const n = name.toLowerCase();
+  if (n === "think") return "thinking";
+  if (n === "thought") return "reasoning";
+  return n;
+}
+
+function closeTagVariants(normalized) {
+  if (normalized === "thinking") return ["</thinking>", "</think>"];
+  if (normalized === "reasoning") return ["</reasoning>", "</thought>"];
+  return ["</" + normalized + ">"];
+}
+
+function findCloseTag(buf, normalized) {
+  const variants = closeTagVariants(normalized);
+  let best = null;
+  for (const v of variants) {
+    const idx = buf.toLowerCase().indexOf(v.toLowerCase());
+    if (idx >= 0 && (best === null || idx < best.index)) {
+      best = { index: idx, length: v.length };
+    }
+  }
+  return best;
+}
+
+function maybePartialCloseTag(buf, normalized) {
+  if (buf.length === 0) return 0;
+  const variants = closeTagVariants(normalized);
+  const lower = buf.toLowerCase();
+  for (const v of variants) {
+    const lowerV = v.toLowerCase();
+    for (let keep = 1; keep <= Math.min(buf.length, lowerV.length - 1); keep++) {
+      const suffix = lower.slice(-keep);
+      if (lowerV.startsWith(suffix)) return keep;
+    }
+  }
+  return 0;
+}
+
+class ThinkingTagStreamParser {
+  constructor() {
+    this._buf = "";
+    this._inTag = false;
+    this._tagName = "";
+  }
+
+  feed(chunk) {
+    this._buf += chunk;
+    let reasoning = "";
+    let text = "";
+
+    while (this._buf.length > 0) {
+      if (!this._inTag) {
+        const m = this._buf.match(THINKING_OPEN_RE);
+        if (!m) {
+          const lt = this._buf.lastIndexOf("<");
+          if (lt >= 0 && this._buf.length - lt <= 20) {
+            text += this._buf.slice(0, lt);
+            this._buf = this._buf.slice(lt);
+            break;
+          }
+          text += this._buf;
+          this._buf = "";
+          break;
+        }
+        text += this._buf.slice(0, m.index);
+        this._buf = this._buf.slice(m.index + m[0].length);
+        this._inTag = true;
+        this._tagName = normalizeTagName(m[1]);
+      } else {
+        const found = findCloseTag(this._buf, this._tagName);
+        if (!found) {
+          const keep = maybePartialCloseTag(this._buf, this._tagName);
+          if (keep > 0) {
+            reasoning += this._buf.slice(0, -keep);
+            this._buf = this._buf.slice(-keep);
+            break;
+          }
+          reasoning += this._buf;
+          this._buf = "";
+          break;
+        }
+        reasoning += this._buf.slice(0, found.index);
+        this._buf = this._buf.slice(found.index + found.length);
+        this._inTag = false;
+        this._tagName = "";
+      }
+    }
+
+    return { reasoning, text };
+  }
+
+  flush() {
+    if (this._inTag) {
+      const result = { reasoning: "", text: "<" + this._tagName + ">" + this._buf };
+      this._buf = "";
+      this._inTag = false;
+      this._tagName = "";
+      return result;
+    }
+    const result = { reasoning: "", text: this._buf };
+    this._buf = "";
+    return result;
+  }
+}
+
 const EFFORT_TO_BUDGET = {
   low: 2000,
   medium: 8000,
@@ -86,6 +197,11 @@ function buildUpstreamRequest(requestBody, provider, _settings) {
 
   if (requestBody.tools && requestBody.tools.length > 0) {
     payload.tools = convertTools(requestBody.tools);
+  }
+
+  // DeepSeek user_id via Anthropic metadata (account-level isolation)
+  if (provider.userId) {
+    payload.metadata = { user_id: provider.userId };
   }
 
   return payload;
@@ -237,9 +353,10 @@ function safeParseJson(value) {
  * @param {string} provider.baseUrl - API base URL
  * @param {string} provider.apiKey - API key
  * @param {function} emit - Callback receiving event objects (from events.js factory functions)
+ * @param {object} [traceSession] - Optional trace session for raw SSE capture
  * @returns {Promise<void>}
  */
-async function streamUpstream(upstreamPayload, provider, emit) {
+async function streamUpstream(upstreamPayload, provider, emit, traceSession) {
   const baseUrl = (provider.baseUrl || "https://api.anthropic.com").replace(/\/+$/, "");
   const url = baseUrl + "/v1/messages";
 
@@ -290,8 +407,10 @@ async function streamUpstream(upstreamPayload, provider, emit) {
   let streamEndedCleanly = false;
   let thinkingText = "";
   let thinkingSignature = "";
+  const thinkParser = new ThinkingTagStreamParser();
 
   for await (const chunk of parseSSEStream(res.body)) {
+    if (traceSession) traceSession.logRawLine(chunk);
     let data;
     try { data = JSON.parse(chunk); } catch { log.warn("[anthropic] unparseable SSE chunk"); continue; }
 
@@ -339,7 +458,9 @@ async function streamUpstream(upstreamPayload, provider, emit) {
         thinkingText += delta.thinking || "";
         emit(reasoningDeltaEvent(delta.thinking || ""));
       } else if (delta.type === "text_delta") {
-        emit(textDeltaEvent(delta.text || ""));
+        const parsed = thinkParser.feed(delta.text || "");
+        if (parsed.reasoning) emit(reasoningDeltaEvent(parsed.reasoning));
+        if (parsed.text) emit(textDeltaEvent(parsed.text));
       } else if (delta.type === "input_json_delta") {
         const tc = toolCalls[currentBlockIndex];
         if (tc) {
@@ -371,9 +492,16 @@ async function streamUpstream(upstreamPayload, provider, emit) {
   }
 
   if (!streamEndedCleanly) {
+    const flushed = thinkParser.flush();
+    if (flushed.reasoning) emit(reasoningDeltaEvent(flushed.reasoning));
+    if (flushed.text) emit(textDeltaEvent(flushed.text));
     emit(errorEvent("Upstream stream ended unexpectedly", "stream_interrupted"));
     return;
   }
+
+  const flushed = thinkParser.flush();
+  if (flushed.reasoning) emit(reasoningDeltaEvent(flushed.reasoning));
+  if (flushed.text) emit(textDeltaEvent(flushed.text));
 
   emit(responseCompletedEvent(usage));
 }
@@ -389,9 +517,10 @@ async function streamUpstream(upstreamPayload, provider, emit) {
  *
  * @param {object} upstreamPayload - Payload from buildUpstreamRequest
  * @param {object} provider - Provider configuration
+ * @param {object} [traceSession] - Optional trace session for raw response capture
  * @returns {Promise<{text: string, reasoning: string, toolCalls: Array, usage: object|null}>}
  */
-async function callUpstream(upstreamPayload, provider) {
+async function callUpstream(upstreamPayload, provider, traceSession) {
   const payload = Object.assign({}, upstreamPayload, { stream: false });
   const betas = payload._betas;
   delete payload._betas;
@@ -417,6 +546,7 @@ async function callUpstream(upstreamPayload, provider) {
   });
 
   const responseBody = await res.body.text();
+  if (traceSession) traceSession.logRawLine(responseBody);
   if (res.statusCode !== 200) {
     let msg = "Upstream returned HTTP " + res.statusCode;
     try { msg = JSON.parse(responseBody).error.message || msg; } catch {}
@@ -445,7 +575,13 @@ async function callUpstream(upstreamPayload, provider) {
           reasoningCache.store(block.thinking, block.signature);
         }
       } else if (block.type === "text") {
-        result.text += block.text || "";
+        // Strip inline thinking tags from text (belt-and-suspenders for
+        // providers that inline thinking inside text blocks).
+        const extracted = extractThinkingTags(block.text || "");
+        result.text += extracted.text;
+        if (extracted.reasoning) {
+          result.reasoning = result.reasoning ? result.reasoning + "\n\n" + extracted.reasoning : extracted.reasoning;
+        }
       } else if (block.type === "tool_use") {
         result.toolCalls.push({
           id: block.id,
@@ -459,6 +595,17 @@ async function callUpstream(upstreamPayload, provider) {
   return result;
 }
 
+function extractThinkingTags(text) {
+  const reasoning = [];
+  const cleaned = text.replace(
+    /<\s*(think(?:ing)?|thought|reasoning)\s*>([\s\S]*?)<\/\s*\1\s*>/gi,
+    function (_match, _tag, inner) {
+      if (inner.trim()) reasoning.push(inner.trim());
+      return "";
+    }
+  );
+  return { text: cleaned.trim(), reasoning: reasoning.join("\n\n") };
+}
 
 function dumpRequestThinking(payload, _provider) {
   if (!payload || !Array.isArray(payload.messages)) return;

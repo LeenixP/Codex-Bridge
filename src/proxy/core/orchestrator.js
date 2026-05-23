@@ -4,6 +4,7 @@ const { makeId } = require("../../shared/http");
 const { createSseBridge } = require("./sse-bridge");
 const { errorEvent } = require("./events");
 const { getHooks } = require("../presets");
+const { createTraceSession } = require("../../shared/trace");
 const log = require("../../shared/logger");
 
 async function orchestrate(req, res, requestBody, provider, settings) {
@@ -21,6 +22,13 @@ async function orchestrate(req, res, requestBody, provider, settings) {
     return;
   }
 
+  // Trace session — activated by settings.traceEnabled toggle in UI
+  const trace = createTraceSession(settings, model);
+  if (trace) {
+    trace.logRequest(requestBody);
+    log.info("Trace enabled — writing to trace directory", { provider: provider.name, requestId: responseId });
+  }
+
   log.debug("Input items: " + (requestBody.input ? requestBody.input.length : 0) + " | tools: " + (requestBody.tools ? requestBody.tools.length : 0), { provider: provider.name, requestId: responseId });
 
   const upstreamRequest = adapter.buildUpstreamRequest(requestBody, provider, settings);
@@ -36,24 +44,31 @@ async function orchestrate(req, res, requestBody, provider, settings) {
   }
 
   if (stream) {
-    const bridge = createSseBridge(res, responseId, model);
+    const bridge = createSseBridge(res, responseId, model, trace);
     try {
       await adapter.streamUpstream(upstreamRequest, provider, (event) => {
         bridge.handleEvent(event);
-      });
+      }, trace);
       log.info("Stream done — " + provider.name + " | model=" + model, { provider: provider.name, requestId: responseId });
     } catch (err) {
       log.error("Stream failed: " + err.message, { provider: provider.name, requestId: responseId });
       bridge.handleEvent(errorEvent(err.message || "Upstream request failed", "upstream_error"));
+    } finally {
+      if (trace) trace.close();
     }
   } else {
     try {
-      const result = await adapter.callUpstream(upstreamRequest, provider);
+      const result = await adapter.callUpstream(upstreamRequest, provider, trace);
       const response = buildSyncResponse(responseId, model, result);
+      if (trace) {
+        trace.logRawLine(JSON.stringify(response));
+        trace.close();
+      }
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify(response));
       log.info("Sync response — " + provider.name + " | model=" + model, { provider: provider.name, requestId: responseId });
     } catch (err) {
+      if (trace) trace.close();
       log.error("Sync request failed: " + err.message, { provider: provider.name, requestId: responseId });
       res.writeHead(err.statusCode || 502, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: { message: err.message || "Upstream request failed", type: "api_error", code: "upstream_error" } }));

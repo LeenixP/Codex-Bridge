@@ -2,6 +2,17 @@
 
 All notable changes to Codex-Switch will be documented in this file.
 
+## [1.2.0] — 2026-05-23
+
+### Added
+- **Trace Mode** — Settings toggle that records every request's raw upstream SSE stream and proxy output to disk (`trace/YYYY-MM-DD/HHmmss_model_{req,raw,out}.*`), enabling pixel-level protocol comparison and debugging without external tools.
+- **Inline thinking-tag parser** — Streaming state machine in both adapters detects `<thinking>`, `<think>`, `<thought>`, `<reasoning>` tags inside text content (used by GLM and similar Chinese LLMs) and routes tagged content to proper reasoning events instead of leaking it to the display.
+- **Legacy `function_call` fallback** — Both adapters now support the older single `function_call` delta format used by some Chinese LLMs, in addition to the standard `tool_calls` array.
+- **DeepSeek `user_id` passthrough** — Provider-level `userId` field passes through as `user_id` (OpenAI Chat) or `metadata.user_id` (Anthropic) for account-level KVCache and safety isolation.
+
+### Changed
+- Tool call start events are now deduplicated via a `started` flag to prevent redundant SSE emissions.
+
 ## [0.1.1] — 2026-05-23
 
 ### Added
