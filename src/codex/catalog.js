@@ -209,6 +209,91 @@ function writeCatalog(catalog, dataDir) {
   return catalogPath;
 }
 
+/**
+ * Safely insert or update a key-value pair inside a TOML [section].
+ * Uses line-level operations to avoid corrupting the TOML structure.
+ */
+function upsertTomlKey(content, section, key, value, comment) {
+  var lines = content.split("\n");
+  var sectionHeader = "[" + section + "]";
+  var sectionIdx = -1;
+  var sectionEnd = lines.length;
+  var commentSuffix = comment ? "  " + comment : "";
+
+  // Find section boundaries
+  for (var i = 0; i < lines.length; i++) {
+    var t = lines[i].trim();
+    if (t === sectionHeader) {
+      sectionIdx = i;
+      continue;
+    }
+    if (sectionIdx !== -1 && i > sectionIdx && /^\[/.test(t) && t !== sectionHeader) {
+      sectionEnd = i;
+      break;
+    }
+  }
+
+  if (sectionIdx === -1) {
+    // Section not found — append
+    if (lines.length > 0 && lines[lines.length - 1].trim() !== "") lines.push("");
+    lines.push(sectionHeader);
+    lines.push(key + ' = "' + tomlEscape(value) + '"' + commentSuffix);
+    return lines.join("\n");
+  }
+
+  // Find existing key
+  var keyRe = new RegExp("^" + key.replace(/\./g, "\\.") + "\\s*=");
+  for (var k = sectionIdx + 1; k < sectionEnd; k++) {
+    if (keyRe.test(lines[k].trim())) {
+      lines[k] = key + ' = "' + tomlEscape(value) + '"' + commentSuffix;
+      return lines.join("\n");
+    }
+  }
+
+  // Insert after section header
+  lines.splice(sectionIdx + 1, 0, key + ' = "' + tomlEscape(value) + '"' + commentSuffix);
+  return lines.join("\n");
+}
+
+/** Restore a TOML key to its original value, or remove it if original is empty. */
+function restoreTomlKey(content, section, key, origValue) {
+  if (origValue === null || origValue === undefined) origValue = "";
+  var lines = content.split("\n");
+  var sectionHeader = "[" + section + "]";
+  var keyRe = new RegExp("^" + key.replace(/\./g, "\\.") + "\\s*=\\s*");
+  for (var i = 0; i < lines.length; i++) {
+    if (keyRe.test(lines[i].trim())) {
+      if (origValue !== "") {
+        lines[i] = key + " = " + origValue;
+      } else {
+        lines.splice(i, 1);
+      }
+      break;
+    }
+  }
+  // Clean up empty section
+  if (origValue === "") {
+    var secIdx = -1;
+    for (var j = 0; j < lines.length; j++) {
+      if (lines[j].trim() === sectionHeader) { secIdx = j; break; }
+    }
+    if (secIdx !== -1) {
+      var nextSec = lines.length;
+      for (var n = secIdx + 1; n < lines.length; n++) {
+        if (/^\[/.test(lines[n].trim())) { nextSec = n; break; }
+      }
+      var hasContent = false;
+      for (var c = secIdx + 1; c < nextSec; c++) {
+        if (lines[c].trim() && !lines[c].trim().startsWith("#")) { hasContent = true; break; }
+      }
+      if (!hasContent) {
+        lines.splice(secIdx, nextSec - secIdx);
+      }
+    }
+  }
+  return lines.join("\n");
+}
+
 async function injectCodexConfig(proxyPort, providers) {
   const result = { ok: false, message: "", configPath: CODEX_CONFIG_FILE, authPath: CODEX_AUTH_FILE };
 
@@ -294,48 +379,18 @@ async function injectCodexConfig(proxyPort, providers) {
 
   // 3. Sandbox — force unelevated (no approval prompts with proxy)
   if (origSandbox && origSandbox !== "unelevated") {
-    existing = existing.replace(
-      /^(\[windows\][\s\S]*?)sandbox\s*=\s*"[^"]*"/m,
-      '$1sandbox = "unelevated"  # Codex-Switch: proxy mode, auto-approve',
-    );
+    existing = upsertTomlKey(existing, "windows", "sandbox", "unelevated", "# Codex-Switch: proxy mode, auto-approve");
     modifications.push("sandbox: " + origSandbox + " → unelevated");
   } else if (!origSandbox) {
-    // No sandbox configured — add [windows] section
-    existing = existing.trimEnd() + '\n\n[windows]\nsandbox = "unelevated"  # Codex-Switch: proxy mode, auto-approve\n';
+    existing = upsertTomlKey(existing, "windows", "sandbox", "unelevated", "# Codex-Switch: proxy mode, auto-approve");
     modifications.push("sandbox: (none) → unelevated");
   }
 
   // 4. [features] — enable hooks and computer for full Codex compatibility
-  if (!origFeaturesHooks || origFeaturesHooks === "false") {
-    if (/^\[features\]/m.test(existing)) {
-      if (/^hooks\s*=/m.test(existing)) {
-        existing = existing.replace(/^hooks\s*=\s*.*$/m, "hooks = true  # Codex-Switch: enabled for proxy compatibility");
-      } else {
-        existing = existing.replace(
-          /^(\[features\][\s\S]*?)(\n\[|$)/m,
-          "$1hooks = true  # Codex-Switch: enabled for proxy compatibility\n$2",
-        );
-      }
-    } else {
-      existing = existing.trimEnd() + "\n\n[features]\nhooks = true  # Codex-Switch: enabled for proxy compatibility\n";
-    }
-    modifications.push("features.hooks → true");
-  }
-  if (!origFeaturesComputer || origFeaturesComputer === "false") {
-    if (/^\[features\]/m.test(existing)) {
-      if (/^computer\s*=/m.test(existing)) {
-        existing = existing.replace(/^computer\s*=\s*.*$/m, "computer = true  # Codex-Switch: enabled for proxy compatibility");
-      } else {
-        existing = existing.replace(
-          /^(\[features\][\s\S]*?)(\n\[|$)/m,
-          "$1computer = true  # Codex-Switch: enabled for proxy compatibility\n$2",
-        );
-      }
-    } else {
-      existing = existing.trimEnd() + "\n\n[features]\ncomputer = true  # Codex-Switch: enabled for proxy compatibility\n";
-    }
-    modifications.push("features.computer → true");
-  }
+  existing = upsertTomlKey(existing, "features", "hooks", "true", "# Codex-Switch: enabled for proxy compatibility");
+  modifications.push("features.hooks → true");
+  existing = upsertTomlKey(existing, "features", "computer", "true", "# Codex-Switch: enabled for proxy compatibility");
+  modifications.push("features.computer → true");
 
   // --- Build managed section ---
   const savedOriginals = [
@@ -442,54 +497,24 @@ function removeCodexConfig() {
         content = content.replace(/^(model\s*=.*\n)/m, '$1preferred_auth_method = "apikey"\n');
       }
 
-      // sandbox — restore original or remove Codex-Switch managed one
-      if (origSandbox) {
-        content = content.replace(/sandbox\s*=\s*"[^"]*".*$/m, 'sandbox = "' + tomlEscape(origSandbox) + '"');
-      } else {
-        // Remove Codex-Switch-added sandbox if there was no original
-        content = content.replace(/^sandbox\s*=\s*"[^"]*" {2}# Codex-Switch:.*$\n?/m, "");
-        // Clean up empty [windows] section
-        content = content.replace(/^\[windows\]\n(?:#.*\n?)*\n?/m, "");
-      }
+      // sandbox, features — restore originals safely
+      content = restoreTomlKey(content, "windows", "sandbox", origSandbox);
+      content = restoreTomlKey(content, "features", "hooks", origFeaturesHooks);
+      content = restoreTomlKey(content, "features", "computer", origFeaturesComputer);
+      content = restoreTomlKey(content, "features", "memories", origFeaturesMemories);
 
-      // personality — restore original
+      // personality — restore original or remove if it was Codex-Switch-added
       if (origPersonality) {
         if (/^personality\s*=/m.test(content)) {
           content = content.replace(/^personality\s*=\s*.*$/m, 'personality = "' + tomlEscape(origPersonality) + '"');
-        } else {
-          content = content.replace(/^(model\s*=.*\n)/m, '$1personality = "' + tomlEscape(origPersonality) + '"\n');
         }
       }
 
       // model_reasoning_effort — restore original
       if (origReasoningEffort) {
         if (/^model_reasoning_effort\s*=/m.test(content)) {
-          content = content.replace(
-            /^model_reasoning_effort\s*=\s*.*$/m,
-            'model_reasoning_effort = "' + tomlEscape(origReasoningEffort) + '"',
-          );
-        } else {
-          content = content.replace(/^(model\s*=.*\n)/m, '$1model_reasoning_effort = "' + tomlEscape(origReasoningEffort) + '"\n');
+          content = content.replace(/^model_reasoning_effort\s*=\s*.*$/m, 'model_reasoning_effort = "' + tomlEscape(origReasoningEffort) + '"');
         }
-      }
-
-      // features.hooks — restore original
-      if (origFeaturesHooks) {
-        content = content.replace(/^hooks\s*=\s*true {2}# Codex-Switch:.*$\n?/m, "hooks = " + origFeaturesHooks + "\n");
-      } else {
-        content = content.replace(/^hooks\s*=\s*true {2}# Codex-Switch:.*$\n?/m, "");
-      }
-
-      // features.computer — restore original
-      if (origFeaturesComputer) {
-        content = content.replace(/^computer\s*=\s*true {2}# Codex-Switch:.*$\n?/m, "computer = " + origFeaturesComputer + "\n");
-      } else {
-        content = content.replace(/^computer\s*=\s*true {2}# Codex-Switch:.*$\n?/m, "");
-      }
-
-      // features.memories — restore original
-      if (origFeaturesMemories) {
-        content = content.replace(/^memories\s*=\s*(?:true|false).*$\n?/m, "memories = " + origFeaturesMemories + "\n");
       }
 
       // Clean up multiple blank lines
