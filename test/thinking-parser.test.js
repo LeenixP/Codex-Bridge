@@ -430,6 +430,39 @@ function testExtractCarryover() {
   assert(result.text === "", "no stray text");
 }
 
+function testStreamMarkdownCodeSpanThinkTag() {
+  console.log("\n[Test] stream: literal <thinking> inside backtick code span not matched");
+  var parser = new ThinkingTagStreamParser();
+  var r = parser.feed("The parser handles `<thinking>` tags");
+  assert(r.text === "The parser handles `<thinking>` tags", "backtick-wrapped tag is plain text");
+  assert(r.reasoning === "", "no reasoning extracted from code span");
+}
+
+function testStreamMarkdownCodeBlockThinkTag() {
+  console.log("\n[Test] stream: literal <thinking> inside triple backtick block not matched");
+  var parser = new ThinkingTagStreamParser();
+  var r1 = parser.feed("```\n<thinking>some text\n```");
+  assert(r1.text === "```\n<thinking>some text\n```", "triple-backtick block preserves literal tag");
+  assert(r1.reasoning === "", "no reasoning from code block content");
+}
+
+function testStreamBacktickThenRealTag() {
+  console.log("\n[Test] stream: real <thinking> outside backticks still matched");
+  var parser = new ThinkingTagStreamParser();
+  var r = parser.feed("See `<thinkshortcode>`, now real <thinking>actual reasoning</thinking> after");
+  assert(r.text === "See `<thinkshortcode>`, now real  after", "backtick tag preserved, real tag removed");
+  assert(r.reasoning === "actual reasoning", "real tag content extracted as reasoning");
+}
+
+function testStreamUnclosedBacktickWithRealTag() {
+  console.log("\n[Test] stream: unclosed backtick does not suppress real tag after");
+  var parser = new ThinkingTagStreamParser();
+  var r1 = parser.feed("text `open");
+  var r2 = parser.feed(" <thinking>real reasoning</thinking> end");
+  assert(r2.reasoning === "real reasoning", "real tag content extracted despite unclosed backtick before");
+  var flush = parser.flush();
+}
+
 // ===========================================================================
 // Main
 // ===========================================================================
@@ -463,6 +496,13 @@ testStreamThinkCloseThinkVariant();
 testStreamThoughtCloseThoughtVariant();
 testStreamTextBeforeAndAfter();
 testStreamMultiFeedPartialClose();
+
+// 2b. Markdown backtick awareness
+console.log("\n--- 2b. Markdown backtick awareness ---");
+testStreamMarkdownCodeSpanThinkTag();
+testStreamMarkdownCodeBlockThinkTag();
+testStreamBacktickThenRealTag();
+testStreamUnclosedBacktickWithRealTag();
 
 // 3. Non-streaming extractor
 console.log("\n--- 3. extractThinkingTags ---");

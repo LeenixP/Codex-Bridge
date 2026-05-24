@@ -66,6 +66,47 @@ class ThinkingTagStreamParser {
     this._buf = "";
     this._inTag = false;
     this._tagName = "";
+    this._inCodeSpan = false;
+    this._inCodeBlock = false;
+  }
+
+  _tryOpenCode() {
+    var idx = this._buf.indexOf('`');
+    if (idx < 0) return null;
+    var run = 0;
+    for (var i = idx; i < this._buf.length && this._buf[i] === '`'; i++) {
+      run++;
+    }
+    if (run >= 3) {
+      var out = this._buf.slice(0, idx + run);
+      this._buf = this._buf.slice(idx + run);
+      this._inCodeBlock = true;
+      return out;
+    }
+    var out = this._buf.slice(0, idx + 1);
+    this._buf = this._buf.slice(idx + 1);
+    this._inCodeSpan = true;
+    return out;
+  }
+
+  _tryCloseCode() {
+    var idx = this._buf.indexOf('`');
+    if (idx < 0) return null;
+    if (this._inCodeBlock) {
+      var run = 0;
+      for (var i = idx; i < this._buf.length && this._buf[i] === '`'; i++) {
+        run++;
+      }
+      if (run < 3) return null;
+      var out = this._buf.slice(0, idx + run);
+      this._buf = this._buf.slice(idx + run);
+      this._inCodeBlock = false;
+      return out;
+    }
+    var out = this._buf.slice(0, idx + 1);
+    this._buf = this._buf.slice(idx + 1);
+    this._inCodeSpan = false;
+    return out;
   }
 
   feed(chunk) {
@@ -74,25 +115,7 @@ class ThinkingTagStreamParser {
     let text = "";
 
     while (this._buf.length > 0) {
-      if (!this._inTag) {
-        const m = this._buf.match(THINKING_OPEN_RE);
-        if (!m) {
-          // Keep a look-behind window for a partial opening tag.
-          const lt = this._buf.lastIndexOf("<");
-          if (lt >= 0 && this._buf.length - lt <= 20) {
-            text += this._buf.slice(0, lt);
-            this._buf = this._buf.slice(lt);
-            break;
-          }
-          text += this._buf;
-          this._buf = "";
-          break;
-        }
-        text += this._buf.slice(0, m.index);
-        this._buf = this._buf.slice(m.index + m[0].length);
-        this._inTag = true;
-        this._tagName = normalizeTagName(m[1]);
-      } else {
+      if (this._inTag) {
         const found = findCloseTag(this._buf, this._tagName);
         if (!found) {
           const keep = maybePartialCloseTag(this._buf, this._tagName);
@@ -109,27 +132,73 @@ class ThinkingTagStreamParser {
         this._buf = this._buf.slice(found.index + found.length);
         this._inTag = false;
         this._tagName = "";
+      } else if (this._inCodeSpan || this._inCodeBlock) {
+        if (this._inCodeSpan) {
+          var nl = this._buf.indexOf('\n');
+          if (nl >= 0) {
+            text += this._buf.slice(0, nl);
+            this._buf = this._buf.slice(nl);
+            this._inCodeSpan = false;
+            continue;
+          }
+          var tm = this._buf.match(THINKING_OPEN_RE);
+          if (tm) {
+            text += this._buf.slice(0, tm.index);
+            this._buf = this._buf.slice(tm.index);
+            this._inCodeSpan = false;
+            continue;
+          }
+        }
+        var closed = this._tryCloseCode();
+        if (closed !== null) {
+          text += closed;
+          continue;
+        }
+        text += this._buf;
+        this._buf = "";
+        break;
+      } else {
+        var opened = this._tryOpenCode();
+        if (opened !== null) {
+          text += opened;
+          continue;
+        }
+        const m = this._buf.match(THINKING_OPEN_RE);
+        if (!m) {
+          const lt = this._buf.lastIndexOf("<");
+          if (lt >= 0 && this._buf.length - lt <= 20) {
+            text += this._buf.slice(0, lt);
+            this._buf = this._buf.slice(lt);
+            break;
+          }
+          text += this._buf;
+          this._buf = "";
+          break;
+        }
+        text += this._buf.slice(0, m.index);
+        this._buf = this._buf.slice(m.index + m[0].length);
+        this._inTag = true;
+        this._tagName = normalizeTagName(m[1]);
       }
     }
 
     return { reasoning, text };
   }
 
-  // Flush any remaining buffered content.
-  // When inside an unclosed thinking tag, promote the buffered content
-  // to reasoning instead of leaking the raw tag into visible text.
   flush() {
     if (this._inTag) {
-      // Unclosed tag — promote content to reasoning so the tag never
-      // appears in the text output sent to the user.
       const result = { reasoning: this._buf, text: "" };
       this._buf = "";
       this._inTag = false;
       this._tagName = "";
+      this._inCodeSpan = false;
+      this._inCodeBlock = false;
       return result;
     }
     const result = { reasoning: "", text: this._buf };
     this._buf = "";
+    this._inCodeSpan = false;
+    this._inCodeBlock = false;
     return result;
   }
 }
