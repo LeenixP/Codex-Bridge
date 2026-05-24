@@ -803,17 +803,17 @@
       });
     });
 
+    dialog.querySelector("#dlg-save").addEventListener("click", saveDialog);
+
+    dialog.addEventListener("mousedown", dialog._overlayClickHandler);
     document.addEventListener("keydown", handleDialogKeydown);
 
-    // Defer display until next paint frame so the DOM is fully laid out
-    requestAnimationFrame(function () {
-      dialog.style.display = "flex";
-      // Focus first input after the dialog is visible
-      requestAnimationFrame(function () {
-        var firstInput = dialog.querySelector("#dlg-name");
-        if (firstInput) firstInput.focus();
-      });
-    });
+    // Show immediately — innerHTML is already parsed, display+layout are synchronous
+    var prevFocus = document.activeElement;
+    dialog._prevFocus = prevFocus;
+    dialog.style.display = "flex";
+    var firstInput = dialog.querySelector("#dlg-name");
+    if (firstInput) firstInput.focus();
   }
 
   function handleDialogKeydown(e) {
