@@ -196,7 +196,7 @@ async function buildCatalog(providers, proxyPort) {
     return { ok: false, error: "No base model found in Codex catalog.", models: [] };
   }
 
-  const activeProviders = (providers || []).filter((p) => p.name && p.model);
+  const activeProviders = (providers || []).filter((p) => p.active && p.name && p.model);
   const models = activeProviders.map((p) => buildProxyModelEntry(baseModel, p, proxyPort));
 
   return { ok: true, error: null, models, baseModel: baseModel.slug };
