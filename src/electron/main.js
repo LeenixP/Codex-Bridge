@@ -4,7 +4,7 @@ const { app, BrowserWindow, Menu, Tray, ipcMain, nativeImage, nativeTheme, shell
 const path = require("node:path");
 const { loadSettings, saveSettings, loadProviders, saveProviders } = require("../shared/config");
 const { createProxyServer, stopProxyServer, getStatus, getLastError } = require("../proxy/server");
-const { injectCodexConfig, removeCodexConfig } = require("../codex/catalog");
+const { injectCodexConfig, removeCodexConfig, removeCatalog, buildCatalog, writeCatalog } = require("../codex/catalog");
 const { getQuickPresets, getVariantBaseUrl } = require("../proxy/presets");
 const log = require("../shared/logger");
 const https = require("node:https");
@@ -95,6 +95,7 @@ function registerIpcHandlers() {
   ipcMain.handle("stop-proxy", async () => {
     await stopProxyServer();
     removeCodexConfig();
+    removeCatalog();
     notifyProxyStatus();
     return getStatus();
   });
@@ -106,6 +107,7 @@ function registerIpcHandlers() {
   });
   ipcMain.handle("remove-codex-config", () => {
     removeCodexConfig();
+    removeCatalog();
     return { ok: true, message: "Codex-Switch config section removed." };
   });
   ipcMain.handle("open-external", (_, url) => {
@@ -198,6 +200,18 @@ async function startProxy() {
   if (providers && providers.length > 0 && providers.some((p) => p.name && p.model)) {
     const result = await injectCodexConfig(settings.port || 8629, providers);
     log.info(result.message);
+    // Write model catalog so Codex recognises the model slugs
+    try {
+      const catalog = await buildCatalog(providers, settings.port || 8629);
+      if (catalog.ok) {
+        const catalogPath = writeCatalog(catalog, null);
+        log.info("Model catalog written: " + catalog.models.length + " models to " + catalogPath);
+      } else {
+        log.warn("Failed to build model catalog: " + (catalog.error || "unknown"));
+      }
+    } catch (err) {
+      log.warn("Failed to write model catalog: " + (err.message || "unknown"));
+    }
   }
   notifyProxyStatus();
   updateTrayMenu();
@@ -343,6 +357,7 @@ function updateTrayMenu() {
       if (proxyRunning) {
         stopProxyServer().then(() => {
           removeCodexConfig();
+          removeCatalog();
           notifyProxyStatus();
           updateTrayMenu();
         });
@@ -361,6 +376,7 @@ function updateTrayMenu() {
         if (proxyRunning) {
           await stopProxyServer();
           removeCodexConfig();
+          removeCatalog();
           notifyProxyStatus();
         } else {
           await startProxy();

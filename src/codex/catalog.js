@@ -500,11 +500,21 @@ function sanitizeSlug(name) {
     .slice(0, 40);
 }
 
+function removeCatalog(dataDir) {
+  const catalogDir = path.join(dataDir || getCodexConfigDir(), "codex-switch");
+  try {
+    if (fs.existsSync(catalogDir)) {
+      fs.rmSync(catalogDir, { recursive: true, force: true });
+    }
+  } catch (e) {}
+}
+
 module.exports = {
   buildCatalog,
   writeCatalog,
   injectCodexConfig,
   removeCodexConfig,
+  removeCatalog,
   writeCodexAuth,
   findCodexCommand,
   getCodexConfigDir,
