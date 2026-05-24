@@ -98,7 +98,10 @@ async function orchestrate(req, res, requestBody, provider, settings) {
       log.info("Sync response — " + provider.name + " | model=" + model, { provider: provider.name, requestId: responseId });
     } catch (err) {
       if (trace) trace.close();
-      log.error("Sync request failed: " + (err.message || "Unknown error") + " (status=" + (err.statusCode || "none") + ")", { provider: provider.name, requestId: responseId });
+      log.error("Sync request failed: " + (err.message || "Unknown error") + " (status=" + (err.statusCode || "none") + ")", {
+        provider: provider.name,
+        requestId: responseId,
+      });
       log.error("Sync request stack: " + (err.stack || "no stack"), { provider: provider.name, requestId: responseId });
       res.writeHead(err.statusCode || 502, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: { message: err.message || "Upstream request failed", type: "api_error", code: "upstream_error" } }));

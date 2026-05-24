@@ -245,16 +245,6 @@ function getTomlKey(obj, key, section) {
   return String(val);
 }
 
-/**
- * Ensure a nested section exists in the TOML object.
- */
-function ensureSection(obj, section) {
-  if (!obj[section] || typeof obj[section] !== "object" || Array.isArray(obj[section])) {
-    obj[section] = {};
-  }
-  return obj[section];
-}
-
 async function injectCodexConfig(proxyPort, providers) {
   var result = { ok: false, message: "", configPath: CODEX_CONFIG_FILE, authPath: CODEX_AUTH_FILE };
 
@@ -274,17 +264,18 @@ async function injectCodexConfig(proxyPort, providers) {
   var providerId = "codex-switch";
   var modelSlug = sanitizeSlug(activeProvider.name);
   var modelName = "codex-switch-" + modelSlug;
+  var upstreamModel = activeProvider.model || modelName;
 
   var marker = "# --- Codex-Switch managed section ---";
   var endMarker = "# --- End Codex-Switch ---";
 
-  // Read and parse existing config
+  // Read existing config
   var existing = "";
   try {
     existing = fs.readFileSync(CODEX_CONFIG_FILE, "utf8");
   } catch (_e) {}
 
-  // Remove old managed section but KEEP its saved originals
+  // Remove old managed section, preserving saved originals
   var oldSection = "";
   var startIdx = existing.indexOf(marker);
   var endIdx = existing.indexOf(endMarker);
@@ -293,7 +284,6 @@ async function injectCodexConfig(proxyPort, providers) {
     existing = existing.slice(0, startIdx) + existing.slice(endIdx + endMarker.length + 1);
   }
 
-  // Parse old saved originals (from previous inject, if any)
   function readSavedOld(key) {
     var re = new RegExp("^# original_" + key + ' = "([^"]*)"', "m");
     var m = oldSection.match(re);
@@ -302,66 +292,20 @@ async function injectCodexConfig(proxyPort, providers) {
 
   var doc = safeParseToml(existing);
 
-  // Snapshot original values: prefer values from old managed section,
-  // because the current TOML may already have been modified by a previous
-  // inject run.
-  var origProvider = readSavedOld("provider") || getTomlKey(doc, "model_provider") || "";
+  // Snapshot originals — prefer old managed section values
+  var origProvider = readSavedOld("provider") || getTomlKey(doc, "model_provider") || "openai";
   var origModel = readSavedOld("model") || getTomlKey(doc, "model") || "";
-  var origAuthMethod = readSavedOld("auth_method") || getTomlKey(doc, "preferred_auth_method") || "";
-  var origPersonality = readSavedOld("personality") || getTomlKey(doc, "personality") || "";
-  var origReasoningEffort = readSavedOld("reasoning_effort") || getTomlKey(doc, "model_reasoning_effort") || "";
-  var origSandbox = readSavedOld("sandbox") || getTomlKey(doc, "sandbox", "windows") || "";
-  var origFeaturesHooks = readSavedOld("features_hooks") || getTomlKey(doc, "hooks", "features") || getTomlKey(doc, "codex_hooks", "features") || "";
-  var origFeaturesMemories = readSavedOld("features_memories") || getTomlKey(doc, "memories", "features") || "";
-  var origFeaturesComputer = readSavedOld("features_computer") || getTomlKey(doc, "computer", "features") || "";
 
-  var modifications = [];
-
-  // Apply Codex-Switch overrides on the parsed TOML object
+  // Apply routing overrides (model_provider + model only)
   doc.model_provider = providerId;
   doc.model = modelName;
-  modifications.push("model_provider → " + providerId);
 
-  if (origAuthMethod === "apikey") {
-    doc.preferred_auth_method = undefined;
-    modifications.push("commented out preferred_auth_method=apikey");
-  }
-
-  var ws = ensureSection(doc, "windows");
-  ws.sandbox = "unelevated";
-  modifications.push("sandbox → unelevated");
-
-  var feats = ensureSection(doc, "features");
-  feats.hooks = true;
-  feats.computer = true;
-  modifications.push("features: hooks=true, computer=true");
-
-  // Serialize back
   var body = stringifyToml(doc);
 
-  // Handle preferred_auth_method comment-out
-  if (origAuthMethod === "apikey") {
-    body = body.replace(/^preferred_auth_method\s*=\s*.*\n?/m, "");
-    body = body.replace(
-      /^(model\s*=\s*.*\n)/m,
-      '$1# preferred_auth_method = "apikey"  # Codex-Switch: commented out — incompatible with hybrid OAuth mode\n',
-    );
-  }
+  // Build managed section
+  var savedOriginals = ['# original_provider = "' + tomlEscape(origProvider) + '"', '# original_model = "' + tomlEscape(origModel) + '"'];
 
-  // Build saved originals
-  var savedOriginals = [
-    '# original_provider = "' + tomlEscape(origProvider) + '"',
-    '# original_model = "' + tomlEscape(origModel) + '"',
-    origAuthMethod ? '# original_auth_method = "' + tomlEscape(origAuthMethod) + '"' : null,
-    origSandbox ? '# original_sandbox = "' + tomlEscape(origSandbox) + '"' : null,
-    origPersonality ? '# original_personality = "' + tomlEscape(origPersonality) + '"' : null,
-    origReasoningEffort ? '# original_reasoning_effort = "' + tomlEscape(origReasoningEffort) + '"' : null,
-    origFeaturesHooks ? '# original_features_hooks = "' + tomlEscape(origFeaturesHooks) + '"' : null,
-    origFeaturesMemories ? '# original_features_memories = "' + tomlEscape(origFeaturesMemories) + '"' : null,
-    origFeaturesComputer ? '# original_features_computer = "' + tomlEscape(origFeaturesComputer) + '"' : null,
-  ].filter(Boolean);
-
-  var aliasLines = ['"' + tomlEscape(modelName) + '" = "' + tomlEscape(activeProvider.model || modelName) + '"'];
+  var aliasLines = ['"' + tomlEscape(modelName) + '" = "' + tomlEscape(upstreamModel) + '"'];
 
   var section = [marker, "# Codex-Switch proxy configuration"]
     .concat(savedOriginals)
@@ -380,7 +324,16 @@ async function injectCodexConfig(proxyPort, providers) {
     .concat([endMarker, ""])
     .join("\n");
 
-  atomicWriteSync(CODEX_CONFIG_FILE, body.trimEnd() + "\n\n" + section);
+  // Validate output before writing
+  var finalText = body.trimEnd() + "\n\n" + section;
+  try {
+    parseToml(finalText);
+  } catch (e) {
+    result.message = "Generated config.toml is invalid: " + e.message;
+    return result;
+  }
+
+  atomicWriteSync(CODEX_CONFIG_FILE, finalText);
 
   // Clean up dummy auth key
   try {
@@ -398,7 +351,7 @@ async function injectCodexConfig(proxyPort, providers) {
   } catch (_e) {}
 
   result.ok = true;
-  result.message = "Codex config updated (" + modifications.join(", ") + ")";
+  result.message = "Codex config updated (model \u2192 " + modelName + ", upstream \u2192 " + upstreamModel + ")";
   return result;
 }
 
@@ -421,42 +374,25 @@ function removeCodexConfig() {
 
       var origProvider = readSaved("provider") || "openai";
       var origModel = readSaved("model") || "";
-      var origSandbox = readSaved("sandbox") || "elevated";
-      var origPersonality = readSaved("personality");
-      var origReasoningEffort = readSaved("reasoning_effort");
-      var origFeaturesHooks = readSaved("features_hooks");
-      var origFeaturesComputer = readSaved("features_computer");
-      var origFeaturesMemories = readSaved("features_memories");
 
+      // Remove managed section
       content = content.slice(0, startIdx) + content.slice(endIdx + endMarker.length + 1);
 
-      // Uncomment preferred_auth_method
-      content = content.replace(/^# preferred_auth_method = "([^"]*)" {2}# Codex-Switch:.*$\n?/m, 'preferred_auth_method = "$1"\n');
-
-      // Parse remaining TOML and restore
+      // Parse and restore routing fields only
       var doc = safeParseToml(content);
-
       doc.model_provider = origProvider;
       if (origModel) doc.model = origModel;
-
-      // Sandbox — always restore, never delete
-      ensureSection(doc, "windows").sandbox = origSandbox;
-
-      // Features — restore originals
-      if (origFeaturesHooks !== null && origFeaturesHooks !== "") {
-        ensureSection(doc, "features").hooks = origFeaturesHooks === "true";
-      }
-      if (origFeaturesComputer !== null && origFeaturesComputer !== "") {
-        ensureSection(doc, "features").computer = origFeaturesComputer === "true";
-      }
-      if (origFeaturesMemories !== null && origFeaturesMemories !== "") {
-        ensureSection(doc, "features").memories = origFeaturesMemories === "true";
-      }
-      if (origPersonality) doc.personality = origPersonality;
-      if (origReasoningEffort) doc.model_reasoning_effort = origReasoningEffort;
+      else delete doc.model;
 
       content = stringifyToml(doc);
       content = content.replace(/\n{3,}/g, "\n\n");
+
+      // Validate before writing
+      try {
+        parseToml(content);
+      } catch (e) {
+        return; // Don't write invalid config
+      }
 
       atomicWriteSync(CODEX_CONFIG_FILE, content.trimEnd() + "\n");
     }
