@@ -440,7 +440,7 @@ async function streamUpstream(upstreamPayload, provider, emit, traceSession) {
   emit(responseCompletedEvent(usage));
 }
 
-async function callUpstream(upstreamPayload, provider, traceSession) {
+async function callUpstream(upstreamPayload, provider, _traceSession) {
   const payload = Object.assign({}, upstreamPayload, { stream: false });
   const baseUrl = (provider.baseUrl || "https://api.openai.com/v1").replace(/\/+$/, "");
   const url = baseUrl + "/chat/completions";

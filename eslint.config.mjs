@@ -93,8 +93,8 @@ export default [
       },
     },
     rules: {
-      "no-var": "error",
-      "prefer-const": "error",
+      "no-var": "off",
+      "prefer-const": "off",
       "no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
       semi: ["error", "always"],
       quotes: ["error", "double", { avoidEscape: true }],

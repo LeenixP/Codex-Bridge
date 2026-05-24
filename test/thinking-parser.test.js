@@ -140,7 +140,7 @@ function testStreamCaseInsensitive() {
 
   var parser3 = new ThinkingTagStreamParser();
   parser3.feed("<THINKING>");
-  var r3 = parser3.feed("upper")
+  var r3 = parser3.feed("upper");
   assert(r3.reasoning === "upper", "uppercase tag: content extracted");
 }
 

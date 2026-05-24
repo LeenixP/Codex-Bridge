@@ -9,7 +9,6 @@
 // under hooks/<vendor>.js.  This keeps presets/index.js lean.
 
 const deepseekHooks = require("./hooks/deepseek");
-const kimiHooks = require("./hooks/kimi");
 const kimiAnthropicHooks = require("./hooks/kimi-anthropic");
 
 // --- Preset registry ---------------------------------------------------------
