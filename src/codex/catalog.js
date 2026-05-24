@@ -243,72 +243,124 @@ async function injectCodexConfig(proxyPort, providers) {
     existing = existing.slice(0, startIdx) + existing.slice(endIdx + endMarker.length + 1);
   }
 
-  // Extract original model_provider / model before replacing them
-  const origProvider = (existing.match(/^model_provider\s*=\s*"([^"]*)"/m) || [])[1] || "";
-  const origModel = (existing.match(/^model\s*=\s*"([^"]*)"/m) || [])[1] || "";
+  // --- Snapshot original values before modification ---
+  function readTomlKey(content, key, section) {
+    if (section) {
+      const secRe = new RegExp("\\[" + section.replace(/\./g, "\\.") + "\\][\\s\\S]*?(?=\\n\\[|$)", "m");
+      const secMatch = content.match(secRe);
+      if (!secMatch) return null;
+      const re = new RegExp("^" + key.replace(/\./g, "\\.") + "\\s*=\\s*(.+)", "m");
+      const m = secMatch[0].match(re);
+      return m ? m[1].trim().replace(/^"(.*)"$/, "$1") : null;
+    }
+    const re = new RegExp("^" + key.replace(/\./g, "\\.") + "\\s*=\\s*" + '(.+)$', "m");
+    const m = content.match(re);
+    return m ? m[1].trim().replace(/^"(.*)"$/, "$1") : null;
+  }
 
-  // Replace existing top-level model_provider / model lines in-place so
-  // Codex's TOML parser never sees duplicate keys (first-wins semantics).
-  // If the lines don't exist (clean config), prepend them at the top.
+  // Top-level keys
+  const origProvider = readTomlKey(existing, "model_provider") || "";
+  const origModel = readTomlKey(existing, "model") || "";
+  const origAuthMethod = readTomlKey(existing, "preferred_auth_method") || "";
+  const origPersonality = readTomlKey(existing, "personality") || "";
+  const origReasoningEffort = readTomlKey(existing, "model_reasoning_effort") || "";
+
+  // [windows] section keys
+  const origSandbox = readTomlKey(existing, "sandbox", "windows") || "";
+
+  // [features] section keys
+  const origFeaturesHooks = readTomlKey(existing, "hooks", "features") || readTomlKey(existing, "codex_hooks", "features") || "";
+  const origFeaturesMemories = readTomlKey(existing, "memories", "features") || "";
+
+  const modifications = [];
+
+  // --- Apply Codex-Switch overrides ---
+
+  // 1. model_provider / model
   existing = existing
-    .replace(/^model_provider\s*=\s*.*$\n?/m, '')
-    .replace(/^model\s*=\s*.*$\n?/m, '');
-
+    .replace(/^model_provider\s*=\s*.*$\n?/m, "")
+    .replace(/^model\s*=\s*.*$\n?/m, "");
   const topLevelBlock = 'model_provider = "' + tomlEscape(providerId) + '"\nmodel = "' + tomlEscape(modelName) + '"\n';
-  existing = topLevelBlock + existing.replace(/^\n+/, '');
+  existing = topLevelBlock + existing.replace(/^\n+/, "");
+  modifications.push("model_provider → " + providerId);
+  modifications.push("model → " + modelName);
 
-  // Detect and comment out preferred_auth_method = "apikey" — it conflicts
-  // with the hybrid OAuth + proxy mode and causes Codex to hang on startup.
-  const authMethodFixed = /^preferred_auth_method\s*=\s*"apikey"/m.test(existing);
-  if (authMethodFixed) {
+  // 2. preferred_auth_method — comment out if "apikey" (incompatible with hybrid OAuth)
+  if (origAuthMethod === "apikey") {
     existing = existing.replace(
       /^preferred_auth_method\s*=\s*"apikey"/m,
       '# preferred_auth_method = "apikey"  # Codex-Switch: commented out — incompatible with hybrid OAuth mode',
     );
+    modifications.push("commented out preferred_auth_method=apikey");
   }
 
-  // Collect all known Codex model slugs for reference, but do NOT alias them
-  // to the active provider model.  Only codex-switch-* prefixed models are
-  // aliased here, so native GPT/o-series models remain available through the
-  // original OpenAI provider when the user switches model_provider back.
-  try {
-    const nativeCatalog = await readNativeCatalog();
-    if (nativeCatalog && Array.isArray(nativeCatalog.models)) {
-      nativeModelSlugs = nativeCatalog.models.map(function (m) {
-        return m.slug;
-      });
-    }
-  } catch {}
+  // 3. Sandbox — force unelevated (no approval prompts with proxy)
+  if (origSandbox && origSandbox !== "unelevated") {
+    existing = existing.replace(
+      /^(\[windows\][\s\S]*?)sandbox\s*=\s*"[^"]*"/m,
+      '$1sandbox = "unelevated"  # Codex-Switch: proxy mode, auto-approve',
+    );
+    modifications.push("sandbox: " + origSandbox + " → unelevated");
+  } else if (!origSandbox) {
+    // No sandbox configured — add [windows] section
+    existing = existing.trimEnd() + '\n\n[windows]\nsandbox = "unelevated"  # Codex-Switch: proxy mode, auto-approve\n';
+    modifications.push("sandbox: (none) → unelevated");
+  }
 
-  // Only alias the codex-switch prefixed model — native models stay untouched
+  // 4. [features] — enable hooks for Codex-Switch compatibility
+  if (!origFeaturesHooks || origFeaturesHooks === "false") {
+    // Insert/update hooks under [features]
+    if (/^\[features\]/m.test(existing)) {
+      if (/^hooks\s*=/m.test(existing)) {
+        existing = existing.replace(/^hooks\s*=\s*.*$/m, 'hooks = true  # Codex-Switch: enabled for proxy compatibility');
+      } else {
+        existing = existing.replace(/^(\[features\][\s\S]*?)(\n\[|$)/m, '$1hooks = true  # Codex-Switch: enabled for proxy compatibility\n$2');
+      }
+    } else {
+      existing = existing.trimEnd() + '\n\n[features]\nhooks = true  # Codex-Switch: enabled for proxy compatibility\n';
+    }
+    modifications.push("features.hooks → true");
+  }
+
+  // --- Build managed section ---
+  const savedOriginals = [
+    '# original_provider = "' + tomlEscape(origProvider) + '"',
+    '# original_model = "' + tomlEscape(origModel) + '"',
+    origAuthMethod ? '# original_auth_method = "' + tomlEscape(origAuthMethod) + '"' : null,
+    origSandbox ? '# original_sandbox = "' + tomlEscape(origSandbox) + '"' : null,
+    origPersonality ? '# original_personality = "' + tomlEscape(origPersonality) + '"' : null,
+    origReasoningEffort ? '# original_reasoning_effort = "' + tomlEscape(origReasoningEffort) + '"' : null,
+    origFeaturesHooks ? '# original_features_hooks = "' + tomlEscape(origFeaturesHooks) + '"' : null,
+    origFeaturesMemories ? '# original_features_memories = "' + tomlEscape(origFeaturesMemories) + '"' : null,
+  ].filter(Boolean);
+
   const aliasLines = [
     '"' + tomlEscape(modelName) + '" = "' + tomlEscape(activeProvider.model || modelName) + '"',
   ];
 
-  // Build managed section — only provider definition + aliases (no top-level dupes)
   const section = [
     marker,
     "# Codex-Switch proxy configuration",
-    '# original_provider = "' + tomlEscape(origProvider) + '"',
-    '# original_model = "' + tomlEscape(origModel) + '"',
-    "",
-    "[model_providers." + tomlEscape(providerId) + "]",
-    'name = "' + tomlEscape(activeProvider.name) + ' (Codex-Switch)"',
-    'wire_api = "responses"',
-    "requires_openai_auth = true",
-    'api_key = "' + CODEX_PROXY_AUTH_KEY + '"',
-    'base_url = "http://127.0.0.1:' + proxyPort + '/v1"',
-    "",
-    "[model_providers." + providerId + ".model_aliases]",
   ]
+    .concat(savedOriginals)
+    .concat([
+      "",
+      "[model_providers." + tomlEscape(providerId) + "]",
+      'name = "' + tomlEscape(activeProvider.name) + ' (Codex-Switch)"',
+      'wire_api = "responses"',
+      "requires_openai_auth = true",
+      'api_key = "' + CODEX_PROXY_AUTH_KEY + '"',
+      'base_url = "http://127.0.0.1:' + proxyPort + '/v1"',
+      "",
+      "[model_providers." + providerId + ".model_aliases]",
+    ])
     .concat(aliasLines)
     .concat([endMarker, ""])
     .join("\n");
 
   atomicWriteSync(CODEX_CONFIG_FILE, existing.trimEnd() + "\n\n" + section);
 
-  // Clean up dummy key left by older Codex-Switch versions.
-  // Only removes the OPENAI_API_KEY field — preserves OAuth tokens.
+  // Clean up dummy key left by older Codex-Switch versions
   try {
     if (fs.existsSync(CODEX_AUTH_FILE)) {
       const auth = JSON.parse(fs.readFileSync(CODEX_AUTH_FILE, "utf8"));
@@ -323,17 +375,8 @@ async function injectCodexConfig(proxyPort, providers) {
     }
   } catch {}
 
-  // Note: auth.json is intentionally left untouched beyond the cleanup above.
-  // With requires_openai_auth = true, Codex uses the ChatGPT OAuth session
-  // for auth-layer features (plugins, Mobile, quotas), while model requests
-  // route through the local proxy.  The api_key in the provider config is
-  // the Bearer token Codex sends; the proxy ignores it and uses its own keys.
-
   result.ok = true;
-  result.message = "Codex config updated: model=" + activeProvider.name + ", port=" + proxyPort;
-  if (authMethodFixed) {
-    result.message += " | Fixed: commented out preferred_auth_method=apikey (incompatible with hybrid OAuth mode)";
-  }
+  result.message = "Codex config updated (" + modifications.join(", ") + ")";
   return result;
 }
 
@@ -346,27 +389,84 @@ function removeCodexConfig() {
     const startIdx = content.indexOf(marker);
     const endIdx = content.indexOf(endMarker);
     if (startIdx !== -1 && endIdx !== -1) {
-      // Restore original model_provider / model from saved comments
       const section = content.slice(startIdx, endIdx + endMarker.length);
-      const origProvider = (section.match(/^# original_provider = "([^"]*)"/m) || [])[1];
-      const origModel = (section.match(/^# original_model = "([^"]*)"/m) || [])[1];
 
+      // Parse all saved original values from comments
+      function readSaved(key) {
+        const re = new RegExp("^# original_" + key + ' = "([^"]*)"', "m");
+        const m = section.match(re);
+        return m ? m[1] : null;
+      }
+
+      const origProvider = readSaved("provider");
+      const origModel = readSaved("model");
+      const origAuthMethod = readSaved("auth_method");
+      const origSandbox = readSaved("sandbox");
+      const origPersonality = readSaved("personality");
+      const origReasoningEffort = readSaved("reasoning_effort");
+      const origFeaturesHooks = readSaved("features_hooks");
+      const origFeaturesMemories = readSaved("features_memories");
+
+      // Remove managed section
       content = content.slice(0, startIdx) + content.slice(endIdx + endMarker.length + 1);
 
+      // --- Restore original values ---
+
+      // model_provider / model
       if (origProvider) {
         content = content.replace(/^model_provider\s*=\s*.*$/m, 'model_provider = "' + tomlEscape(origProvider) + '"');
+      } else {
+        content = content.replace(/^model_provider\s*=\s*.*$\n?/m, "");
       }
       if (origModel) {
         content = content.replace(/^model\s*=\s*.*$/m, 'model = "' + tomlEscape(origModel) + '"');
+      } else {
+        content = content.replace(/^model\s*=\s*.*$\n?/m, "");
       }
+
+      // preferred_auth_method — uncomment if it was commented out
+      content = content.replace(
+        /^# preferred_auth_method = "([^"]*)"  # Codex-Switch:.*$/m,
+        'preferred_auth_method = "$1"',
+      );
+      if (origAuthMethod === "apikey" && !/^preferred_auth_method\s*=/m.test(content)) {
+        content = content.replace(
+          /^(model\s*=.*\n)/m,
+          '$1preferred_auth_method = "apikey"\n',
+        );
+      }
+
+      // sandbox — restore original or remove Codex-Switch managed one
+      if (origSandbox) {
+        content = content.replace(
+          /sandbox\s*=\s*"[^"]*".*$/m,
+          'sandbox = "' + tomlEscape(origSandbox) + '"',
+        );
+      } else {
+        // Remove Codex-Switch-added sandbox if there was no original
+        content = content.replace(/^sandbox\s*=\s*"[^"]*"  # Codex-Switch:.*$\n?/m, "");
+        // Clean up empty [windows] section
+        content = content.replace(/^\[windows\]\n(?:#.*\n?)*\n?/m, "");
+      }
+
+      // features.hooks — restore original
+      if (origFeaturesHooks) {
+        content = content.replace(
+          /^hooks\s*=\s*true  # Codex-Switch:.*$\n?/m,
+          'hooks = ' + origFeaturesHooks + '\n',
+        );
+      } else {
+        content = content.replace(/^hooks\s*=\s*true  # Codex-Switch:.*$\n?/m, "");
+      }
+
+      // Clean up multiple blank lines
+      content = content.replace(/\n{3,}/g, "\n\n");
 
       atomicWriteSync(CODEX_CONFIG_FILE, content.trimEnd() + "\n");
     }
   } catch {}
 
-  // Clean up dummy key that may have been written by an older version.
-  // Only remove the OPENAI_API_KEY field — never delete the file,
-  // as it may contain valid ChatGPT OAuth tokens.
+  // Clean up dummy key that may have been written by an older version
   try {
     const auth = JSON.parse(fs.readFileSync(CODEX_AUTH_FILE, "utf8"));
     if (auth.OPENAI_API_KEY === CODEX_PROXY_AUTH_KEY) {
