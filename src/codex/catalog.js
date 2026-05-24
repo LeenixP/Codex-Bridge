@@ -262,7 +262,10 @@ async function injectCodexConfig(proxyPort, providers) {
     fs.mkdirSync(CODEX_CONFIG_DIR, { recursive: true });
   }
 
-  var activeProvider = providers.find(function (p) { return p.active; }) || providers[0];
+  var activeProvider =
+    providers.find(function (p) {
+      return p.active;
+    }) || providers[0];
   if (!activeProvider) {
     result.message = "No provider to inject.";
     return result;
@@ -277,7 +280,9 @@ async function injectCodexConfig(proxyPort, providers) {
 
   // Read and parse existing config
   var existing = "";
-  try { existing = fs.readFileSync(CODEX_CONFIG_FILE, "utf8"); } catch (_e) {}
+  try {
+    existing = fs.readFileSync(CODEX_CONFIG_FILE, "utf8");
+  } catch (_e) {}
 
   // Remove old managed section
   var startIdx = existing.indexOf(marker);
@@ -328,7 +333,7 @@ async function injectCodexConfig(proxyPort, providers) {
     body = body.replace(/^preferred_auth_method\s*=\s*.*\n?/m, "");
     body = body.replace(
       /^(model\s*=\s*.*\n)/m,
-      "$1# preferred_auth_method = \"apikey\"  # Codex-Switch: commented out — incompatible with hybrid OAuth mode\n"
+      '$1# preferred_auth_method = "apikey"  # Codex-Switch: commented out — incompatible with hybrid OAuth mode\n',
     );
   }
 
@@ -345,14 +350,9 @@ async function injectCodexConfig(proxyPort, providers) {
     origFeaturesComputer ? '# original_features_computer = "' + tomlEscape(origFeaturesComputer) + '"' : null,
   ].filter(Boolean);
 
-  var aliasLines = [
-    '"' + tomlEscape(modelName) + '" = "' + tomlEscape(activeProvider.model || modelName) + '"',
-  ];
+  var aliasLines = ['"' + tomlEscape(modelName) + '" = "' + tomlEscape(activeProvider.model || modelName) + '"'];
 
-  var section = [
-    marker,
-    "# Codex-Switch proxy configuration",
-  ]
+  var section = [marker, "# Codex-Switch proxy configuration"]
     .concat(savedOriginals)
     .concat([
       "",
@@ -410,7 +410,7 @@ function removeCodexConfig() {
 
       var origProvider = readSaved("provider") || "openai";
       var origModel = readSaved("model") || "";
-            var origSandbox = readSaved("sandbox") || "elevated";
+      var origSandbox = readSaved("sandbox") || "elevated";
       var origPersonality = readSaved("personality");
       var origReasoningEffort = readSaved("reasoning_effort");
       var origFeaturesHooks = readSaved("features_hooks");
