@@ -717,11 +717,16 @@
       "</button>" +
       "</div></div>";
 
-    dialog.style.display = "flex";
+    // Remove old overlay click listener before adding a new one
+    if (dialog._overlayClickHandler) {
+      dialog.removeEventListener("mousedown", dialog._overlayClickHandler);
+    }
+    dialog._overlayClickHandler = function (e) {
+      if (e.target === dialog) closeDialog();
+    };
+    dialog.addEventListener("mousedown", dialog._overlayClickHandler);
 
-    const prevFocus = document.activeElement;
-    dialog._prevFocus = prevFocus;
-
+    // Buttons and event wiring
     dialog.querySelector("#dialog-close").addEventListener("click", closeDialog);
     dialog.querySelector("#dlg-cancel").addEventListener("click", closeDialog);
     dialog.querySelector("#dlg-save").addEventListener("click", saveDialog);
@@ -738,8 +743,11 @@
           document.getElementById("dlg-baseurl").value = "";
           document.getElementById("dlg-model").value = "";
           document.getElementById("dlg-apikey").value = "";
-          var pgCustom = document.getElementById("dlg-protocol").closest(".form-group");
-          if (pgCustom) pgCustom.style.display = "";
+          var protoLabel = document.querySelector('label[for="dlg-protocol"]');
+          if (protoLabel) {
+            var existingHint = protoLabel.querySelector(".protocol-fixed-hint");
+            if (existingHint) existingHint.remove();
+          }
         } else {
           const preset = PRESETS[Number(btn.dataset.preset)];
           selectedPreset = preset.id || null;
@@ -756,15 +764,15 @@
             protoSelect.value = preset.protocol || "openai-chat";
           }
           // Show/hide fixed hint in label
-          var protoLabel = document.querySelector('label[for="dlg-protocol"]');
-          if (protoLabel) {
-            var existingHint = protoLabel.querySelector(".protocol-fixed-hint");
-            if (existingHint) existingHint.remove();
+          var protoLabel2 = document.querySelector('label[for="dlg-protocol"]');
+          if (protoLabel2) {
+            var existingHint2 = protoLabel2.querySelector(".protocol-fixed-hint");
+            if (existingHint2) existingHint2.remove();
             if (singleProto) {
               var hint = document.createElement("span");
               hint.className = "protocol-fixed-hint";
               hint.textContent = " (" + t("presetFixed") + ")";
-              protoLabel.appendChild(hint);
+              protoLabel2.appendChild(hint);
             }
           }
         }
@@ -795,16 +803,16 @@
       });
     });
 
-    dialog.addEventListener("mousedown", (e) => {
-      if (e.target === dialog) closeDialog();
-    });
-
     document.addEventListener("keydown", handleDialogKeydown);
 
-    // Focus first input
-    requestAnimationFrame(() => {
-      const firstInput = dialog.querySelector("#dlg-name");
-      if (firstInput) firstInput.focus();
+    // Defer display until next paint frame so the DOM is fully laid out
+    requestAnimationFrame(function () {
+      dialog.style.display = "flex";
+      // Focus first input after the dialog is visible
+      requestAnimationFrame(function () {
+        var firstInput = dialog.querySelector("#dlg-name");
+        if (firstInput) firstInput.focus();
+      });
     });
   }
 
