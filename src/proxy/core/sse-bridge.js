@@ -234,13 +234,14 @@ function createSseBridge(res, responseId, model, traceSession, previousResponseI
     closeReasoning();
     closeMessage();
     const idx = outputIndex++;
-    const item = { id: makeId("fc"), callId, name, outputIndex: idx, args: "" };
+    const itemType = name === "computer" ? "computer_call" : "function_call";
+    const item = { id: makeId("fc"), callId, name, outputIndex: idx, args: "", itemType: itemType };
     toolCallItems.set(callId, item);
     emitToClient("response.output_item.added", {
       type: "response.output_item.added",
       response_id: responseId,
       output_index: idx,
-      item: { id: item.id, type: "function_call", call_id: callId, name, status: "in_progress", arguments: "" },
+      item: { id: item.id, type: itemType, call_id: callId, name, status: "in_progress", arguments: "" },
       sequence_number: seq.next(),
     });
   }
@@ -249,8 +250,11 @@ function createSseBridge(res, responseId, model, traceSession, previousResponseI
     const item = toolCallItems.get(callId);
     if (!item) return;
     item.args += delta;
-    emitToClient("response.function_call_arguments.delta", {
-      type: "response.function_call_arguments.delta",
+    const eventName = item.itemType === "computer_call"
+      ? "response.computer_call_arguments.delta"
+      : "response.function_call_arguments.delta";
+    emitToClient(eventName, {
+      type: eventName,
       response_id: responseId,
       item_id: item.id,
       output_index: item.outputIndex,
@@ -263,8 +267,11 @@ function createSseBridge(res, responseId, model, traceSession, previousResponseI
     const item = toolCallItems.get(callId);
     if (!item) return;
     item.args = args || item.args;
-    emitToClient("response.function_call_arguments.done", {
-      type: "response.function_call_arguments.done",
+    const doneEventName = item.itemType === "computer_call"
+      ? "response.computer_call_arguments.done"
+      : "response.function_call_arguments.done";
+    emitToClient(doneEventName, {
+      type: doneEventName,
       response_id: responseId,
       item_id: item.id,
       output_index: item.outputIndex,
@@ -273,7 +280,7 @@ function createSseBridge(res, responseId, model, traceSession, previousResponseI
     });
     const doneItem = {
       id: item.id,
-      type: "function_call",
+      type: item.itemType,
       call_id: callId,
       name: item.name,
       status: "completed",

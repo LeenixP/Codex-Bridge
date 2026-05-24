@@ -91,6 +91,10 @@ function buildUpstreamRequest(requestBody, provider, _settings) {
   if (requestBody.tools && requestBody.tools.length > 0) {
     payload.tools = convertTools(requestBody.tools);
     if (payload.tools.length === 0) delete payload.tools;
+    // Add computer-use beta header when computer tools are present
+    if (payload.tools && payload.tools.some(function (t) { return t.type === "computer_20250124"; })) {
+      payload._betas.push("computer-use-2025-01-24");
+    }
   }
   if (requestBody.tool_choice) {
     payload.tool_choice = convertToolChoice(requestBody.tool_choice);
@@ -285,7 +289,87 @@ function convertInputToMessages(requestBody, provider) {
         } else {
           messages.push({ role: "user", content: [toolResult] });
         }
-      } else if (item.type === "compaction" || item.type === "compaction_trigger") {
+      } else if (item.type === "computer_call") {
+        // Codex computer use action → Anthropic tool_use block
+        const input = Object.assign({}, item.action || {});
+        if (item.coordinate) input.coordinate = item.coordinate;
+        if (item.text) input.text = item.text;
+        if (item.key) input.key = item.key;
+        const toolUse = {
+          type: "tool_use",
+          id: item.call_id || item.id || "cu_" + Math.random().toString(36).slice(2, 12),
+          name: "computer",
+          input: input,
+        };
+        const last = messages[messages.length - 1];
+        if (last && last.role === "assistant") {
+          if (typeof last.content === "string") {
+            last.content = [{ type: "text", text: last.content }, toolUse];
+          } else if (Array.isArray(last.content)) {
+            last.content.push(toolUse);
+          } else {
+            last.content = [toolUse];
+          }
+        } else {
+          messages.push({ role: "assistant", content: [toolUse] });
+        }
+      } else if (item.type === "computer_call_output") {
+        // Codex computer use result (screenshot, etc.) → Anthropic tool_result
+        const content = [];
+        const output = item.output;
+        if (typeof output === "string") {
+          content.push({ type: "text", text: output });
+        } else if (Array.isArray(output)) {
+          for (const part of output) {
+            if (typeof part === "string") {
+              content.push({ type: "text", text: part });
+            } else if (part && part.type === "image_url") {
+              const url = part.image_url ? part.image_url.url : part.url || "";
+              if (url.startsWith("data:")) {
+                const m = url.match(/^data:([^;]+);base64,(.+)$/);
+                if (m) {
+                  content.push({
+                    type: "image",
+                    source: { type: "base64", media_type: m[1], data: m[2] },
+                  });
+                }
+              }
+            } else if (part && part.type === "image" && part.source) {
+              content.push(part);
+            }
+          }
+        } else if (output && typeof output === "object" && output.type === "screenshot") {
+          // Direct screenshot object
+          if (output.image_url) {
+            const url = output.image_url.url || output.image_url;
+            if (url && url.startsWith("data:")) {
+              const m = url.match(/^data:([^;]+);base64,(.+)$/);
+              if (m) {
+                content.push({
+                  type: "image",
+                  source: { type: "base64", media_type: m[1], data: m[2] },
+                });
+              }
+            }
+          }
+        }
+        const toolResult = {
+          type: "tool_result",
+          tool_use_id: item.call_id || item.id,
+          content: content.length > 0 ? content : (typeof output === "string" ? output : JSON.stringify(output || {})),
+        };
+        const last = messages[messages.length - 1];
+        if (last && last.role === "user") {
+          if (typeof last.content === "string") {
+            last.content = [{ type: "text", text: last.content }, toolResult];
+          } else if (Array.isArray(last.content)) {
+            last.content.push(toolResult);
+          } else {
+            last.content = [toolResult];
+          }
+        } else {
+          messages.push({ role: "user", content: [toolResult] });
+        }
         continue;
       }
     }
@@ -380,6 +464,15 @@ function convertTools(tools) {
           description: sub.description || "",
           input_schema: sub.parameters || sub.input_schema || { type: "object", properties: {} },
         }));
+    }
+    if (t.type === "computer_use" || t.type === "computer") {
+      return [{
+        type: "computer_20250124",
+        name: t.name || "computer",
+        display_width_px: t.display_width || t.display_width_px || 1024,
+        display_height_px: t.display_height || t.display_height_px || 768,
+        display_number: t.display_number !== undefined ? t.display_number : 1,
+      }];
     }
     return [];
   });
