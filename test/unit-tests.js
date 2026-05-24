@@ -1501,7 +1501,7 @@ function testOpenAIChatOutputTextPart() {
 // ===========================================================================
 
 async function main() {
-  console.log("=== Codex-Switch Comprehensive Unit Tests ===\n");
+  console.log("=== Codex-Bridge Comprehensive Unit Tests ===\n");
 
   // 1. OpenAI Chat Adapter
   console.log("--- 1. OpenAI Chat Adapter ---");

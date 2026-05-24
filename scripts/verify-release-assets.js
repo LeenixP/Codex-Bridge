@@ -8,16 +8,16 @@ const DIST_DIR = path.join(__dirname, "..", "dist");
 const version = require("../package.json").version;
 
 const required = [
-  "Codex-Switch-v" + version + "-Linux-arm64.AppImage",
-  "Codex-Switch-v" + version + "-Linux-arm64.AppImage.md5",
-  "Codex-Switch-v" + version + "-Linux-x86_64.AppImage",
-  "Codex-Switch-v" + version + "-Linux-x86_64.AppImage.md5",
-  "Codex-Switch-v" + version + "-macOS.dmg",
-  "Codex-Switch-v" + version + "-macOS.dmg.md5",
-  "Codex-Switch-v" + version + "-macOS.zip",
-  "Codex-Switch-v" + version + "-macOS.zip.md5",
-  "Codex-Switch-v" + version + "-Windows_Setup.exe",
-  "Codex-Switch-v" + version + "-Windows_Setup.exe.md5",
+  "Codex-Bridge-v" + version + "-Linux-arm64.AppImage",
+  "Codex-Bridge-v" + version + "-Linux-arm64.AppImage.md5",
+  "Codex-Bridge-v" + version + "-Linux-x86_64.AppImage",
+  "Codex-Bridge-v" + version + "-Linux-x86_64.AppImage.md5",
+  "Codex-Bridge-v" + version + "-macOS.dmg",
+  "Codex-Bridge-v" + version + "-macOS.dmg.md5",
+  "Codex-Bridge-v" + version + "-macOS.zip",
+  "Codex-Bridge-v" + version + "-macOS.zip.md5",
+  "Codex-Bridge-v" + version + "-Windows_Setup.exe",
+  "Codex-Bridge-v" + version + "-Windows_Setup.exe.md5",
 ];
 
 function fileMd5(filePath) {

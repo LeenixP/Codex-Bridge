@@ -95,7 +95,7 @@ async function testHealthEndpoint() {
   const data = JSON.parse(res.body);
   assert(res.status === 200, "Status 200");
   assert(data.ok === true, "ok is true");
-  assert(data.service === "codex-switch", "service name correct");
+  assert(data.service === "codex-bridge", "service name correct");
 }
 
 async function testModelsEndpoint() {
@@ -209,7 +209,7 @@ function delay(ms) {
 }
 
 async function main() {
-  console.log("=== Codex-Switch Proxy Integration Tests ===");
+  console.log("=== Codex-Bridge Proxy Integration Tests ===");
 
   PROXY_PORT = await getAvailablePort();
   await createMockOpenAIChatServer();

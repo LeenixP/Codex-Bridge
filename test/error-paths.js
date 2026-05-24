@@ -359,7 +359,7 @@ async function stopMockAndCreate(mode, options) {
 }
 
 async function main() {
-  console.log("=== Codex-Switch Error Path Tests ===");
+  console.log("=== Codex-Bridge Error Path Tests ===");
 
   // Setup with OpenAI Chat provider
   PROXY_PORT = await getAvailablePort();

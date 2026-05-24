@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Codex-Switch will be documented in this file.
+All notable changes to Codex-Bridge will be documented in this file.
 
 ## [1.2.0] — 2026-05-23
 
@@ -19,7 +19,7 @@ All notable changes to Codex-Switch will be documented in this file.
 - **厂商预设系统** — `src/proxy/presets/` 注册表架构：DeepSeek 等厂商内置专属优化（reasoning 回传、双协议端点自动切换）。新厂商只需添加数据条目 + 可选钩子，不碰通用适配器。
 - **请求日志** — orchestrator 层记录每次请求（模型、协议、流模式、成功/失败），实时推送到 UI 日志面板。
 - **更新检查** — 关于页面可手动检查 GitHub Releases 获取最新版本。
-- **供应商显示名称** — Codex 中 provider 显示为「供应商名 (Codex-Switch)」，明确代理来源。
+- **供应商显示名称** — Codex 中 provider 显示为「供应商名 (Codex-Bridge)」，明确代理来源。
 
 ### Changed
 - **代理启动流程** — 移除自动启动和自动重启；侧边栏新增一键启动/停止按钮；供应商变更后自动停止代理并闪烁按钮提醒。
@@ -36,7 +36,7 @@ All notable changes to Codex-Switch will be documented in this file.
 ## [0.1.0] — 2026-05-22
 
 ### Added
-- Initial release of Codex-Switch.
+- Initial release of Codex-Bridge.
 - OpenAI Chat Completions protocol adapter with SSE streaming support.
 - Anthropic Messages protocol adapter with extended thinking and tool use support.
 - Provider management (add, edit, delete, activate, test connection).

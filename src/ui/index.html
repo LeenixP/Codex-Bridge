@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Codex-Switch - AI model protocol bridge proxy">
+  <meta name="description" content="Codex-Bridge - AI model protocol bridge proxy">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; object-src 'none'; base-uri 'none';">
-  <title>Codex-Switch</title>
+  <title>Codex-Bridge</title>
   <link rel="icon" href="assets/icons/app.png" type="image/png">
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -15,10 +15,10 @@
       <div class="sidebar-header">
         <div class="logo">
           <div class="logo-icon">
-            <img src="assets/icons/app.png" width="28" height="28" alt="Codex-Switch">
+            <img src="assets/icons/app.png" width="28" height="28" alt="Codex-Bridge">
           </div>
           <div>
-            <div class="logo-text">Codex-Switch</div>
+            <div class="logo-text">Codex-Bridge</div>
             <div class="logo-subtitle" data-i18n="aboutEyebrow">协议桥接</div>
           </div>
         </div>
@@ -34,7 +34,11 @@
       </button>
 
       <nav class="sidebar-nav">
-        <button class="nav-item active" data-page="providers" aria-current="page">
+        <button class="nav-item active" data-page="quickstart" aria-current="page">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          <span data-i18n="navQuickstart">快速开始</span>
+        </button>
+        <button class="nav-item" data-page="providers">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M20 7h-9M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>
           </svg>
@@ -66,8 +70,54 @@
     </aside>
 
     <main id="content">
+      <!-- Quick Start Page -->
+      <section id="page-quickstart" class="page active">
+        <div class="page-header">
+          <div>
+            <h1 data-i18n="quickstartTitle">快速开始</h1>
+            <p class="page-subtitle" data-i18n="quickstartSubtitle">Codex-Bridge 作为纯 API 代理运行，配合 cc-switch 或其他工具使用。</p>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header"><h2 data-i18n="quickstartApiEndpoint">API 地址</h2></div>
+          <div class="panel-body">
+            <code id="quickstart-endpoint" style="font-size:14px;display:block;padding:8px 12px;background:var(--ctrl-bg);border-radius:6px;word-break:break-all">http://127.0.0.1:8629/v1</code>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header"><h2 data-i18n="quickstartModelsLabel">可用模型</h2></div>
+          <div class="panel-body">
+            <div id="quickstart-models" style="font-size:13px;color:var(--text-secondary)">
+              <p data-i18n="noProviders">尚未配置供应商。</p>
+            </div>
+            <small data-i18n="quickstartModelsHint" style="display:block;margin-top:8px;font-size:12px;color:var(--text-muted)">cc-switch 中填写的模型名需与此处一致</small>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header"><h2 data-i18n="quickstartTestCmd">测试命令</h2></div>
+          <div class="panel-body">
+            <pre id="quickstart-curl" style="font-size:12px;padding:10px;background:var(--ctrl-bg);border-radius:6px;overflow-x:auto;white-space:pre-wrap">curl http://127.0.0.1:8629/v1/models</pre>
+            <button class="btn btn-secondary" id="btn-copy-curl" style="margin-top:8px"><span data-i18n="quickstartCopyCmd">复制</span></button>
+          </div>
+        </div>
+
+        <div class="panel" style="border-color:var(--accent-warning, #f59e0b)">
+          <div class="panel-header"><h2 data-i18n="quickstartStep3Title">3. 在 cc-switch 中配置</h2></div>
+          <div class="panel-body">
+            <p data-i18n="quickstartStep3Desc" style="font-size:13px;line-height:1.6">在 cc-switch 中添加自定义 Provider，Base URL 填写上方地址，模型名填写 Codex-Bridge 中供应商的模型名。</p>
+            <p style="font-size:12px;color:var(--text-muted);margin-top:8px">
+              <strong>cc-switch Provider 配置示例：</strong><br>
+              <code style="display:block;margin-top:4px;padding:8px;background:var(--ctrl-bg);border-radius:6px;font-size:12px">wire_api = "responses"<br>base_url = "http://127.0.0.1:8629/v1"<br>model = "&lt;Codex-Bridge 中的模型名&gt;"</code>
+            </p>
+          </div>
+        </div>
+      </section>
+
       <!-- Providers Page -->
-      <section id="page-providers" class="page active">
+      <section id="page-providers" class="page">
         <div class="page-header">
           <div>
             <h1 data-i18n="providersTitle">供应商管理</h1>
@@ -178,7 +228,6 @@
       </section>
 
       <!-- Logs Page -->
-      <section id="page-logs" class="page">
         <div class="page-header">
           <div>
             <h1 data-i18n="logsTitle">事件追踪</h1>
@@ -207,11 +256,11 @@
         <div class="panel">
           <div class="panel-body about-hero">
             <div class="about-mark">
-              <img src="assets/icons/app-512.png" width="48" height="48" alt="Codex-Switch">
+              <img src="assets/icons/app-512.png" width="48" height="48" alt="Codex-Bridge">
             </div>
             <div>
               <span class="eyebrow" data-i18n="aboutEyebrow">协议桥接</span>
-              <h2>Codex-Switch</h2>
+              <h2>Codex-Bridge</h2>
               <p data-i18n="aboutDesc">Codex 桌面应用的本地协议桥接，将 OpenAI Chat 和 Anthropic API 转换为 Responses 格式。</p>
               <div class="version-row">
                 <span class="version-pill" id="app-version">v0.1.0</span>
@@ -219,7 +268,7 @@
               </div>
               <p class="about-path" style="font-size:12px;color:var(--text-muted);margin-top:12px">
                 <span data-i18n="dataDirLabel">数据目录</span><br>
-                <code id="data-dir-path" style="font-size:11px;word-break:break-all">~/.codex-switch</code>
+                <code id="data-dir-path" style="font-size:11px;word-break:break-all">~/.codex-bridge</code>
               </p>
               <div class="about-links">
                 <button class="btn btn-secondary" id="link-github">

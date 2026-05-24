@@ -328,7 +328,7 @@ function testAnthropicFunctionCallConversion() {
 }
 
 function main() {
-  console.log("=== Codex-Switch Format & Conversion Tests ===");
+  console.log("=== Codex-Bridge Format & Conversion Tests ===");
 
   testOpenAIMultimodalImage();
   testOpenAIMultimodalBase64Image();

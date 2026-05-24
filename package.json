@@ -1,14 +1,14 @@
 {
-  "name": "codex-switch",
+  "name": "codex-bridge",
   "version": "1.2.0",
   "private": true,
   "description": "Protocol bridge for Codex desktop -- converts OpenAI Chat and Anthropic APIs to OpenAI Responses format.",
   "author": "LeenixP",
   "license": "MIT",
-  "homepage": "https://github.com/LeenixP/Codex-Switch",
+  "homepage": "https://github.com/LeenixP/Codex-Bridge",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/LeenixP/Codex-Switch.git"
+    "url": "git+https://github.com/LeenixP/Codex-Bridge.git"
   },
   "main": "src/electron/main.js",
   "engines": {
@@ -34,8 +34,8 @@
     "dist:verify": "node scripts/verify-release-assets.js"
   },
   "build": {
-    "appId": "io.github.leenixp.codex-switch",
-    "productName": "Codex-Switch",
+    "appId": "io.github.leenixp.codex-bridge",
+    "productName": "Codex-Bridge",
     "copyright": "Copyright 2026 LeenixP",
     "asar": true,
     "directories": {
@@ -67,7 +67,7 @@
       "createStartMenuShortcut": true,
       "allowElevation": true,
       "runAfterFinish": false,
-      "uninstallDisplayName": "Codex-Switch",
+      "uninstallDisplayName": "Codex-Bridge",
       "installerSidebar": false
     },
     "mac": {

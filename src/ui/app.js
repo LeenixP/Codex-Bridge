@@ -5,7 +5,7 @@
     diag("Unhandled rejection: " + (event.reason ? event.reason.message || String(event.reason) : "unknown"));
     console.error("Unhandled rejection:", event.reason);
   });
-  const api = window.codexSwitch;
+  const api = window.codexBridge;
   const T = window.T;
   let providers = [];
   let settings = {};
@@ -62,6 +62,7 @@
 
     // Update dynamic content: providers list, about desc
     if (providers !== undefined) renderProviders();
+    renderQuickstart();
   }
 
   function updateProxyStatusLabel() {
@@ -198,7 +199,7 @@
 
   function showPaths() {
     if (!api) return;
-    const dataDir = api.dataDir || "~/.codex-switch";
+    const dataDir = api.dataDir || "~/.codex-bridge";
     const traceDir = api.traceDir || dataDir + "/trace";
     const dataPathEl = document.getElementById("data-dir-path");
     const tracePathEl = document.getElementById("trace-dir-path");
@@ -524,6 +525,7 @@
     }
     markNeedsRestart();
     renderProviders();
+    renderQuickstart();
   }
 
   async function deleteProvider(index) {
@@ -538,6 +540,7 @@
     }
     if (wasActive) markNeedsRestart();
     renderProviders();
+    renderQuickstart();
   }
 
   async function testProvider(index) {
@@ -880,6 +883,7 @@
       }
       if (wasActive) markNeedsRestart();
       renderProviders();
+      renderQuickstart();
     } catch (err) {
       showToast("Save failed: " + (err.message || "Unknown error"), "error");
     } finally {
@@ -997,6 +1001,39 @@
     return (text || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
+  // Quick start page
+  function renderQuickstart() {
+    var endpoint = "http://" + (settings.host || "127.0.0.1") + ":" + (settings.port || 8629) + "/v1";
+    var endpointEl = document.getElementById("quickstart-endpoint");
+    if (endpointEl) endpointEl.textContent = endpoint;
+
+    var modelsEl = document.getElementById("quickstart-models");
+    if (!modelsEl) return;
+    if (!providers || providers.length === 0) {
+      modelsEl.innerHTML = '<p>' + t("noProviders") + '</p>';
+    } else {
+      modelsEl.innerHTML = providers.map(function (p) {
+        return '<span style="display:inline-block;padding:4px 10px;margin:3px;background:var(--ctrl-bg);border-radius:4px;font-family:monospace;font-size:13px">' + escapeHtml(p.model || "?") + '</span>';
+      }).join("");
+    }
+
+    var curlEl = document.getElementById("quickstart-curl");
+    if (curlEl) {
+      var model = providers && providers.length > 0 && providers[0].model ? providers[0].model : "MODEL_NAME";
+      curlEl.textContent = 'curl ' + endpoint + '/responses \\\n  -H "Content-Type: application/json" \\\n  -d \'{"model":"' + model + '","input":"hello","stream":true}\'';
+    }
+  }
+
+  document.getElementById("btn-copy-curl").addEventListener("click", function () {
+    var curlEl = document.getElementById("quickstart-curl");
+    if (!curlEl) return;
+    navigator.clipboard.writeText(curlEl.textContent).then(function () {
+      showToast(t("quickstartCopied"), "success");
+    }).catch(function () {
+      showToast("Copy failed", "error");
+    });
+  });
+
   // Open URL in system browser
   function openLink(url) {
     diag("openLink: url=" + url);
@@ -1022,10 +1059,10 @@
     }
   }
   document.getElementById("link-github").addEventListener("click", () => {
-    openLink("https://github.com/LeenixP/Codex-Switch");
+    openLink("https://github.com/LeenixP/Codex-Bridge");
   });
   document.getElementById("link-issues").addEventListener("click", () => {
-    openLink("https://github.com/LeenixP/Codex-Switch/issues");
+    openLink("https://github.com/LeenixP/Codex-Bridge/issues");
   });
 
   // Check for updates

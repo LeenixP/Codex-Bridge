@@ -1,12 +1,12 @@
-# Contributing to Codex-Switch
+# Contributing to Codex-Bridge
 
 Thanks for your interest in contributing!
 
 ## Setup
 
 ```bash
-git clone https://github.com/LeenixP/Codex-Switch.git
-cd Codex-Switch
+git clone https://github.com/LeenixP/Codex-Bridge.git
+cd Codex-Bridge
 npm install
 ```
 
@@ -123,7 +123,7 @@ Releases are created **manually** — there is no automated build-and-publish pi
    npm run dist:mac     # macOS: dmg + tar.gz + zip (universal)
    ```
 
-4. Go to [GitHub Releases](https://github.com/LeenixP/Codex-Switch/releases) and click **Draft a new release**.
+4. Go to [GitHub Releases](https://github.com/LeenixP/Codex-Bridge/releases) and click **Draft a new release**.
 5. Create a tag (e.g., `v0.2.0`) and set the release title.
 6. Copy the relevant section from `CHANGELOG.md` as the release description.
 7. Upload the built packages from `dist/`.

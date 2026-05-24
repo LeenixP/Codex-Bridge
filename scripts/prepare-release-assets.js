@@ -32,8 +32,8 @@ function prepare() {
   if (!fs.existsSync(DIST_DIR)) return;
 
   const version = require("../package.json").version;
-  const linuxX64 = "Codex-Switch-v" + version + "-Linux-x64.AppImage";
-  const linuxX8664 = "Codex-Switch-v" + version + "-Linux-x86_64.AppImage";
+  const linuxX64 = "Codex-Bridge-v" + version + "-Linux-x64.AppImage";
+  const linuxX8664 = "Codex-Bridge-v" + version + "-Linux-x86_64.AppImage";
 
   if (renameIfExists(linuxX64, linuxX8664)) {
     console.log("  rename  " + linuxX64 + " -> " + linuxX8664);
@@ -41,10 +41,10 @@ function prepare() {
 
   const md5Targets = [
     linuxX8664,
-    "Codex-Switch-v" + version + "-Linux-arm64.AppImage",
-    "Codex-Switch-v" + version + "-Windows_Setup.exe",
-    "Codex-Switch-v" + version + "-macOS.dmg",
-    "Codex-Switch-v" + version + "-macOS.zip",
+    "Codex-Bridge-v" + version + "-Linux-arm64.AppImage",
+    "Codex-Bridge-v" + version + "-Windows_Setup.exe",
+    "Codex-Bridge-v" + version + "-macOS.dmg",
+    "Codex-Bridge-v" + version + "-macOS.zip",
   ];
 
   let count = 0;

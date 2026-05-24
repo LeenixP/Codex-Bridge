@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
 
-const APP_NAME = "Codex-Switch";
+const APP_NAME = "Codex-Bridge";
 const DEFAULT_PORT = 8629;
 const DEFAULT_HOST = "127.0.0.1";
 
@@ -47,7 +47,7 @@ function decryptKey(stored) {
 }
 
 function getDataDir() {
-  return path.join(os.homedir(), ".codex-switch");
+  return path.join(os.homedir(), ".codex-bridge");
 }
 
 function ensureDir(dir) {
@@ -131,6 +131,15 @@ function getActiveProvider(providers) {
   return providers.find((p) => p.active) || providers[0];
 }
 
+function getProviderByModel(providers, model) {
+  if (!Array.isArray(providers) || providers.length === 0) return null;
+  if (model) {
+    var match = providers.find(function (p) { return p.model === model; });
+    if (match) return match;
+  }
+  return providers.find(function (p) { return p.active; }) || providers[0];
+}
+
 module.exports = {
   APP_NAME,
   DEFAULT_PORT,
@@ -144,6 +153,7 @@ module.exports = {
   loadProviders,
   saveProviders,
   getActiveProvider,
+  getProviderByModel,
   encryptKey,
   decryptKey,
 };

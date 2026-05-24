@@ -4,13 +4,12 @@ const { app, BrowserWindow, Menu, Tray, ipcMain, nativeImage, nativeTheme, shell
 const path = require("node:path");
 const { loadSettings, saveSettings, loadProviders, saveProviders } = require("../shared/config");
 const { createProxyServer, stopProxyServer, getStatus, getLastError } = require("../proxy/server");
-const { injectCodexConfig, removeCodexConfig, removeCatalog, buildCatalog, writeCatalog } = require("../codex/catalog");
 const { getQuickPresets, getVariantBaseUrl } = require("../proxy/presets");
 const log = require("../shared/logger");
 const https = require("node:https");
 const { request } = require("undici");
 
-const PRODUCT_NAME = "Codex-Switch";
+const PRODUCT_NAME = "Codex-Bridge";
 
 let mainWindow = null;
 let tray = null;
@@ -94,21 +93,11 @@ function registerIpcHandlers() {
   });
   ipcMain.handle("stop-proxy", async () => {
     await stopProxyServer();
-    removeCodexConfig();
-    removeCatalog();
     notifyProxyStatus();
     return getStatus();
   });
   ipcMain.handle("test-provider", async (_, provider) => {
     return testProviderConnection(provider);
-  });
-  ipcMain.handle("inject-codex-config", () => {
-    return injectCodexConfig(settings.port || 8629, providers);
-  });
-  ipcMain.handle("remove-codex-config", () => {
-    removeCodexConfig();
-    removeCatalog();
-    return { ok: true, message: "Codex-Switch config section removed." };
   });
   ipcMain.handle("open-external", (_, url) => {
     if (typeof url !== "string" || !url.startsWith("https://")) return;
@@ -138,9 +127,9 @@ function registerIpcHandlers() {
       }, 15000);
 
       const req = https.get(
-        "https://api.github.com/repos/LeenixP/Codex-Switch/releases/latest",
+        "https://api.github.com/repos/LeenixP/Codex-Bridge/releases/latest",
         {
-          headers: { Accept: "application/vnd.github+json", "User-Agent": "Codex-Switch" },
+          headers: { Accept: "application/vnd.github+json", "User-Agent": "Codex-Bridge" },
         },
         (res) => {
           let data = "";
@@ -197,25 +186,9 @@ async function startProxy() {
     console.error("[startProxy] Error stopping previous server:", err.message);
   }
   await createProxyServer(settings, providers);
-  if (providers && providers.length > 0 && providers.some((p) => p.name && p.model)) {
-    const result = await injectCodexConfig(settings.port || 8629, providers);
-    log.info(result.message);
-    // Write model catalog so Codex recognises the model slugs
-    try {
-      const catalog = await buildCatalog(providers, settings.port || 8629);
-      if (catalog.ok) {
-        const catalogPath = writeCatalog(catalog, null);
-        log.info("Model catalog written: " + catalog.models.length + " models to " + catalogPath);
-      } else {
-        log.warn("Failed to build model catalog: " + (catalog.error || "unknown"));
-      }
-    } catch (err) {
-      log.warn("Failed to write model catalog: " + (err.message || "unknown"));
-    }
-  }
   notifyProxyStatus();
   updateTrayMenu();
-  log.info("Proxy startup complete — ready to accept requests");
+  log.info("Proxy startup complete — ready to accept requests on port " + (settings.port || 8629));
 }
 
 function notifyProxyStatus() {
@@ -354,15 +327,6 @@ function updateTrayMenu() {
         pr.active = idx === i;
       });
       saveProviders(providers);
-      if (proxyRunning) {
-        stopProxyServer().then(() => {
-          removeCodexConfig();
-          removeCatalog();
-          notifyProxyStatus();
-          updateTrayMenu();
-        });
-        return;
-      }
       updateTrayMenu();
     },
   }));
@@ -375,8 +339,6 @@ function updateTrayMenu() {
       click: async () => {
         if (proxyRunning) {
           await stopProxyServer();
-          removeCodexConfig();
-          removeCatalog();
           notifyProxyStatus();
         } else {
           await startProxy();

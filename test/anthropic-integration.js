@@ -288,7 +288,7 @@ async function testAnthropicToolUse() {
 }
 
 async function main() {
-  console.log("=== Codex-Switch Anthropic Integration Tests ===");
+  console.log("=== Codex-Bridge Anthropic Integration Tests ===");
 
   PROXY_PORT = await getAvailablePort();
   await createMockAnthropicServer();

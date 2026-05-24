@@ -4,9 +4,9 @@ const { contextBridge, ipcRenderer } = require("electron");
 const path = require("node:path");
 const os = require("node:os");
 
-const DATA_DIR = path.join(os.homedir(), ".codex-switch");
+const DATA_DIR = path.join(os.homedir(), ".codex-bridge");
 
-contextBridge.exposeInMainWorld("codexSwitch", {
+contextBridge.exposeInMainWorld("codexBridge", {
   getSettings: () => ipcRenderer.invoke("get-settings"),
   saveSettings: (settings) => ipcRenderer.invoke("save-settings", settings),
   getProviders: () => ipcRenderer.invoke("get-providers"),
@@ -16,8 +16,6 @@ contextBridge.exposeInMainWorld("codexSwitch", {
   startProxy: () => ipcRenderer.invoke("start-proxy"),
   stopProxy: () => ipcRenderer.invoke("stop-proxy"),
   testProvider: (provider) => ipcRenderer.invoke("test-provider", provider),
-  injectCodexConfig: () => ipcRenderer.invoke("inject-codex-config"),
-  removeCodexConfig: () => ipcRenderer.invoke("remove-codex-config"),
   openExternal: (url) => ipcRenderer.invoke("open-external", url),
   setThemeSource: (theme) => ipcRenderer.invoke("set-theme-source", theme),
   getAppVersion: () => ipcRenderer.invoke("get-app-version"),

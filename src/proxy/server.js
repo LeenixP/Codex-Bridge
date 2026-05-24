@@ -1,7 +1,7 @@
 "use strict";
 
 const http = require("node:http");
-const { getActiveProvider } = require("../shared/config");
+const { getProviderByModel } = require("../shared/config");
 const { orchestrate } = require("./core/orchestrator");
 const responseStore = require("./core/response-store");
 const log = require("../shared/logger");
@@ -104,7 +104,7 @@ async function handleRequest(req, res, settings, providers) {
     } else if ((pathname === "/v1/models" || pathname === "/models") && req.method === "GET") {
       handleModels(req, res, providers);
     } else if (pathname === "/healthz" || pathname === "/v1/healthz") {
-      sendJson(res, 200, { ok: true, service: "codex-switch", status });
+      sendJson(res, 200, { ok: true, service: "codex-bridge", status });
     } else {
       // /v1/responses/:id and /v1/responses/:id/input_items
       const responseMatch = pathname.match(/^\/v1\/responses\/([^/]+)$/);
@@ -126,12 +126,6 @@ async function handleRequest(req, res, settings, providers) {
 }
 
 async function handleResponses(req, res, settings, providers) {
-  const activeProvider = getActiveProvider(providers);
-  if (!activeProvider) {
-    sendJson(res, 503, { error: { message: "No active provider configured.", type: "server_error", code: "no_provider" } });
-    return;
-  }
-
   const body = await readBody(req);
   let requestBody;
   try {
@@ -143,17 +137,17 @@ async function handleResponses(req, res, settings, providers) {
     return;
   }
 
-  log.info("→ POST /v1/responses stream=" + (requestBody.stream !== false) + " model=" + (requestBody.model || "?"));
-  await orchestrate(req, res, requestBody, activeProvider, settings);
+  const provider = getProviderByModel(providers, requestBody.model);
+  if (!provider) {
+    sendJson(res, 503, { error: { message: "No provider configured for model: " + (requestBody.model || "?"), type: "server_error", code: "no_provider" } });
+    return;
+  }
+
+  log.info("→ POST /v1/responses stream=" + (requestBody.stream !== false) + " model=" + (requestBody.model || "?") + " → " + provider.name);
+  await orchestrate(req, res, requestBody, provider, settings);
 }
 
 async function handleResponsesCompact(req, res, settings, providers) {
-  const activeProvider = getActiveProvider(providers);
-  if (!activeProvider) {
-    sendJson(res, 503, { error: { message: "No active provider configured.", type: "server_error", code: "no_provider" } });
-    return;
-  }
-
   const body = await readBody(req);
   let requestBody;
   try {
@@ -165,9 +159,13 @@ async function handleResponsesCompact(req, res, settings, providers) {
     return;
   }
 
-  // Compact requests reuse the same orchestration pipeline; the adapter
-  // builds upstream format while the SSE bridge emits standard Responses events.
-  await orchestrate(req, res, requestBody, activeProvider, settings);
+  const provider = getProviderByModel(providers, requestBody.model);
+  if (!provider) {
+    sendJson(res, 503, { error: { message: "No provider configured for model: " + (requestBody.model || "?"), type: "server_error", code: "no_provider" } });
+    return;
+  }
+
+  await orchestrate(req, res, requestBody, provider, settings);
 }
 
 async function handleInputTokens(req, res) {
@@ -246,7 +244,7 @@ function handleModels(req, res, providers) {
   if (models.length === 0) models.push("gpt-4o");
   sendJson(res, 200, {
     object: "list",
-    data: models.map((id) => ({ id, object: "model", created: 0, owned_by: "codex-switch" })),
+    data: models.map((id) => ({ id, object: "model", created: 0, owned_by: "codex-bridge" })),
   });
 }
 

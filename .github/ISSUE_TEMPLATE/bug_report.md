@@ -20,7 +20,7 @@ What you expected to happen.
 
 **Environment:**
 - OS: [e.g., Windows 11, macOS 15, Ubuntu 24.04]
-- Codex-Switch version: [e.g., 0.1.0]
+- Codex-Bridge version: [e.g., 0.1.0]
 - Provider protocol: [e.g., openai-chat, anthropic]
 
 **Logs**
