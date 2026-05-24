@@ -19,6 +19,12 @@ function createProxyServer(settings, providers) {
 
   server = http.createServer((req, res) => handleRequest(req, res, settings, providers));
 
+  // Log every TCP connection to diagnose whether Codex reaches the proxy
+  server.on("connection", function (socket) {
+    var addr = socket.remoteAddress || "?";
+    log.info("TCP connection from " + addr);
+  });
+
   return new Promise((resolve, reject) => {
     server.on("error", (error) => {
       status = "error";
