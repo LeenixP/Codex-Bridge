@@ -52,7 +52,9 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "artifactName": "${productName}-v${version}-Windows_Setup.${ext}"
@@ -74,11 +76,15 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["universal"]
+          "arch": [
+            "universal"
+          ]
         },
         {
           "target": "zip",
-          "arch": ["universal"]
+          "arch": [
+            "universal"
+          ]
         }
       ],
       "artifactName": "${productName}-v${version}-macOS.${ext}"
@@ -108,6 +114,7 @@
     "sharp": "^0.34.5"
   },
   "dependencies": {
+    "smol-toml": "^1.6.1",
     "undici": "^7.25.0"
   }
 }
