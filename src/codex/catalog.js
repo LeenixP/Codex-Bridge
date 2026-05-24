@@ -284,25 +284,36 @@ async function injectCodexConfig(proxyPort, providers) {
     existing = fs.readFileSync(CODEX_CONFIG_FILE, "utf8");
   } catch (_e) {}
 
-  // Remove old managed section
+  // Remove old managed section but KEEP its saved originals
+  var oldSection = "";
   var startIdx = existing.indexOf(marker);
   var endIdx = existing.indexOf(endMarker);
   if (startIdx !== -1 && endIdx !== -1) {
+    oldSection = existing.slice(startIdx, endIdx + endMarker.length);
     existing = existing.slice(0, startIdx) + existing.slice(endIdx + endMarker.length + 1);
+  }
+
+  // Parse old saved originals (from previous inject, if any)
+  function readSavedOld(key) {
+    var re = new RegExp("^# original_" + key + ' = "([^"]*)"', "m");
+    var m = oldSection.match(re);
+    return m ? m[1] : null;
   }
 
   var doc = safeParseToml(existing);
 
-  // Snapshot original values
-  var origProvider = getTomlKey(doc, "model_provider") || "";
-  var origModel = getTomlKey(doc, "model") || "";
-  var origAuthMethod = getTomlKey(doc, "preferred_auth_method") || "";
-  var origPersonality = getTomlKey(doc, "personality") || "";
-  var origReasoningEffort = getTomlKey(doc, "model_reasoning_effort") || "";
-  var origSandbox = getTomlKey(doc, "sandbox", "windows") || "";
-  var origFeaturesHooks = getTomlKey(doc, "hooks", "features") || getTomlKey(doc, "codex_hooks", "features") || "";
-  var origFeaturesMemories = getTomlKey(doc, "memories", "features") || "";
-  var origFeaturesComputer = getTomlKey(doc, "computer", "features") || "";
+  // Snapshot original values: prefer values from old managed section,
+  // because the current TOML may already have been modified by a previous
+  // inject run.
+  var origProvider = readSavedOld("provider") || getTomlKey(doc, "model_provider") || "";
+  var origModel = readSavedOld("model") || getTomlKey(doc, "model") || "";
+  var origAuthMethod = readSavedOld("auth_method") || getTomlKey(doc, "preferred_auth_method") || "";
+  var origPersonality = readSavedOld("personality") || getTomlKey(doc, "personality") || "";
+  var origReasoningEffort = readSavedOld("reasoning_effort") || getTomlKey(doc, "model_reasoning_effort") || "";
+  var origSandbox = readSavedOld("sandbox") || getTomlKey(doc, "sandbox", "windows") || "";
+  var origFeaturesHooks = readSavedOld("features_hooks") || getTomlKey(doc, "hooks", "features") || getTomlKey(doc, "codex_hooks", "features") || "";
+  var origFeaturesMemories = readSavedOld("features_memories") || getTomlKey(doc, "memories", "features") || "";
+  var origFeaturesComputer = readSavedOld("features_computer") || getTomlKey(doc, "computer", "features") || "";
 
   var modifications = [];
 
