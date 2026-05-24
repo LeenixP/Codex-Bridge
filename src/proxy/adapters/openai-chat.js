@@ -16,7 +16,7 @@ const {
   errorEvent,
 } = require("../core/events");
 
-function buildUpstreamRequest(requestBody, provider, _settings) {
+function buildUpstreamRequest(requestBody, provider, _settings, modelConfig) {
   if (typeof requestBody.input === "string") {
     if (requestBody.input.trim()) {
       requestBody.input = [{ role: "user", content: requestBody.input }];
@@ -26,13 +26,15 @@ function buildUpstreamRequest(requestBody, provider, _settings) {
   }
   const messages = convertInputToMessages(requestBody, provider);
   const payload = {
-    model: provider.model || requestBody.model,
+    model: (modelConfig && modelConfig.id) || provider.model || requestBody.model,
     messages,
     stream: requestBody.stream !== false,
   };
 
   if (requestBody.max_output_tokens) {
     payload.max_completion_tokens = requestBody.max_output_tokens;
+  } else if (modelConfig && modelConfig.maxOutputK) {
+    payload.max_completion_tokens = modelConfig.maxOutputK * 1024;
   }
   if (requestBody.temperature !== undefined) {
     payload.temperature = requestBody.temperature;
@@ -348,6 +350,7 @@ async function streamUpstream(upstreamPayload, provider, emit, traceSession) {
   let usage = null;
   let streamEndedCleanly = false;
   const thinkParser = new ThinkingTagStreamParser();
+  let upstreamHasReasoning = false;
 
   for await (const chunk of parseSSEStream(res.body)) {
     if (traceSession) traceSession.logRawLine(chunk);
@@ -378,13 +381,18 @@ async function streamUpstream(upstreamPayload, provider, emit, traceSession) {
     if (!delta) continue;
 
     if (delta.reasoning_content) {
+      upstreamHasReasoning = true;
       emit(reasoningDeltaEvent(delta.reasoning_content));
     }
 
     if (delta.content) {
-      const parsed = thinkParser.feed(delta.content);
-      if (parsed.reasoning) emit(reasoningDeltaEvent(parsed.reasoning));
-      if (parsed.text) emit(textDeltaEvent(parsed.text));
+      if (upstreamHasReasoning) {
+        emit(textDeltaEvent(delta.content));
+      } else {
+        const parsed = thinkParser.feed(delta.content);
+        if (parsed.reasoning) emit(reasoningDeltaEvent(parsed.reasoning));
+        if (parsed.text) emit(textDeltaEvent(parsed.text));
+      }
     }
 
     if (delta.tool_calls) {

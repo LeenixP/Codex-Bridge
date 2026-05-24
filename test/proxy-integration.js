@@ -30,7 +30,7 @@ function getAvailablePort() {
   });
 }
 
-function createMockOpenAIChatServer() {
+function createMockOpenAIChatServer(mode) {
   return new Promise((resolve) => {
     mockServer = http.createServer((req, res) => {
       let body = "";
@@ -42,15 +42,26 @@ function createMockOpenAIChatServer() {
 
         if (data.stream) {
           res.writeHead(200, { "Content-Type": "text/event-stream" });
-          const chunks = [
-            { choices: [{ delta: { role: "assistant" }, index: 0 }] },
-            { choices: [{ delta: { content: "Hello" }, index: 0 }] },
-            { choices: [{ delta: { content: " world" }, index: 0 }] },
-            {
-              choices: [{ delta: {}, index: 0, finish_reason: "stop" }],
-              usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
-            },
-          ];
+          var chunks;
+          if (mode === "reasoning_with_literal_think") {
+            chunks = [
+              { choices: [{ delta: { role: "assistant" }, index: 0 }] },
+              { choices: [{ delta: { reasoning_content: "Let me think" }, index: 0 }] },
+              { choices: [{ delta: { content: "The <thinking>" }, index: 0 }] },
+              { choices: [{ delta: { content: " tag parser handles various tags." }, index: 0 }] },
+              { choices: [{ delta: {}, index: 0, finish_reason: "stop" }] },
+            ];
+          } else {
+            chunks = [
+              { choices: [{ delta: { role: "assistant" }, index: 0 }] },
+              { choices: [{ delta: { content: "Hello" }, index: 0 }] },
+              { choices: [{ delta: { content: " world" }, index: 0 }] },
+              {
+                choices: [{ delta: {}, index: 0, finish_reason: "stop" }],
+                usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+              },
+            ];
+          }
           for (const chunk of chunks) {
             res.write("data: " + JSON.stringify(chunk) + "\n\n");
           }
@@ -105,13 +116,13 @@ async function testModelsEndpoint() {
   assert(res.status === 200, "Status 200");
   assert(data.object === "list", "object is list");
   assert(data.data.length === 1, "one model returned");
-  assert(data.data[0].id === "gpt-4o", "model id matches provider config");
+  assert(data.data[0].id === "test/gpt-4o", "model id is key/modelId format");
 }
 
 async function testResponsesSync() {
   console.log("\n[Test] Responses (sync, OpenAI Chat)");
   const body = JSON.stringify({
-    model: "gpt-4o",
+    model: "test/gpt-4o",
     input: "Say hello",
     stream: false,
   });
@@ -139,7 +150,7 @@ async function testResponsesSync() {
 async function testResponsesStream() {
   console.log("\n[Test] Responses (stream, OpenAI Chat)");
   const body = JSON.stringify({
-    model: "gpt-4o",
+    model: "test/gpt-4o",
     input: "Say hello",
     stream: true,
   });
@@ -208,6 +219,59 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function testThinkParserSkippedWithReasoningContent() {
+  console.log("\n[Test] ThinkParser skipped with reasoning_content");
+
+  mockServer.close();
+  await delay(100);
+  await createMockOpenAIChatServer("reasoning_with_literal_think");
+
+  await stopProxyServer();
+  await delay(100);
+
+  var providers = [
+    {
+      name: "Test Provider TS",
+      key: "ts",
+      protocol: "openai-chat",
+      baseUrl: "http://127.0.0.1:" + MOCK_PORT + "/v1",
+      apiKey: "test-key",
+      models: [{ id: "test-model", maxOutputK: 64, maxContextK: 128 }],
+    },
+  ];
+  await createProxyServer({ port: PROXY_PORT, host: "127.0.0.1" }, providers);
+  await delay(300);
+
+  var body = JSON.stringify({
+    model: "ts/test-model",
+    input: "Say hello",
+    stream: true,
+  });
+  var res = await httpRequest(
+    {
+      hostname: "127.0.0.1",
+      port: PROXY_PORT,
+      path: "/v1/responses",
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+    },
+    body,
+  );
+  assert(res.status === 200, "Status 200");
+
+  var events = parseSSEEvents(res.body);
+  var reasoningDeltas = events
+    .filter(function (e) { return e.type === "response.reasoning_summary_text.delta"; })
+    .map(function (e) { return e.delta; });
+  assert(reasoningDeltas.join("").indexOf("Let me think") !== -1, "reasoning_content forwarded as reasoning delta");
+
+  var textDeltas = events
+    .filter(function (e) { return e.type === "response.output_text.delta"; })
+    .map(function (e) { return e.delta; });
+  var fullText = textDeltas.join("");
+  assert(fullText.indexOf("<thinking>") !== -1, "literal <thinking> text preserved in output");
+}
+
 async function main() {
   console.log("=== Codex-Bridge Proxy Integration Tests ===");
 
@@ -218,11 +282,11 @@ async function main() {
   const providers = [
     {
       name: "Test Provider",
+      key: "test",
       protocol: "openai-chat",
       baseUrl: "http://127.0.0.1:" + MOCK_PORT + "/v1",
       apiKey: "test-key",
-      model: "gpt-4o",
-      active: true,
+      models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }],
     },
   ];
 
@@ -235,6 +299,7 @@ async function main() {
     await testModelsEndpoint();
     await testResponsesSync();
     await testResponsesStream();
+    await testThinkParserSkippedWithReasoningContent();
     await testNoProvider();
   } catch (err) {
     console.error("\n[ERROR] Unexpected:", err);
