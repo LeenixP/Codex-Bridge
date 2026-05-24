@@ -3,7 +3,7 @@
 <img src="assets/banner.png" alt="Codex-Switch" width="600">
 
 [![CI](https://github.com/LeenixP/Codex-Switch/actions/workflows/ci.yml/badge.svg)](https://github.com/LeenixP/Codex-Switch/actions/workflows/ci.yml)
-[![License](https://img.shields.io/github/license/LeenixP/Codex-Switch)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/LeenixP/Codex-Switch)](https://github.com/LeenixP/Codex-Switch/releases)
 
 Codex Desktop / CLI 的本地协议桥接工具 —— 将 OpenAI Chat 和 Anthropic API 转换为 OpenAI Responses 格式。
