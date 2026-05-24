@@ -37,6 +37,16 @@ async function bootstrap() {
   providers = loadProviders();
   log.setLevel(settings.logLevel || "info");
 
+  // Log any uncaught exception / unhandled rejection so crashes are visible
+  process.on("uncaughtException", function (err) {
+    log.error("FATAL uncaughtException: " + (err.message || err) + "\n" + (err.stack || ""));
+    console.error("FATAL uncaughtException:", err);
+  });
+  process.on("unhandledRejection", function (reason) {
+    log.error("FATAL unhandledRejection: " + (reason && reason.message ? reason.message : String(reason)));
+    console.error("FATAL unhandledRejection:", reason);
+  });
+
   // Apply dark title bar on Linux
   nativeTheme.themeSource = settings.theme === "dark" ? "dark" : settings.theme === "light" ? "light" : "system";
 
@@ -191,6 +201,7 @@ async function startProxy() {
   }
   notifyProxyStatus();
   updateTrayMenu();
+  log.info("Proxy startup complete — ready to accept requests");
 }
 
 function notifyProxyStatus() {
