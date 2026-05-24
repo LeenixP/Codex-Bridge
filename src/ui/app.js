@@ -623,7 +623,10 @@
         t("protocolAnthropic") +
         "</option>";
     }
-    var showProtocolGroup = !presetProtocols || presetProtocols.length > 1;
+    var protocolDisabled = presetProtocols && presetProtocols.length === 1;
+    var protocolHint = protocolDisabled
+      ? ' <span class="protocol-fixed-hint">(' + t("presetFixed") + ")</span>"
+      : "";
 
     dialog.setAttribute("aria-labelledby", "dialog-title");
 
@@ -656,9 +659,12 @@
       '" placeholder="' +
       t("placeholderName") +
       '"></div>' +
-      '<div class="form-group"' + (showProtocolGroup ? "" : ' style="display:none"') + '><label for="dlg-protocol">' +
+      '<div class="form-group"><label for="dlg-protocol">' +
       t("labelProtocol") +
-      "</label><select id=\"dlg-protocol\">" +
+      protocolHint +
+      "</label><select id=\"dlg-protocol\"" +
+      (protocolDisabled ? " disabled" : "") +
+      ">" +
       protocolOptionsHtml +
       "</select></div>" +
       '<div class="form-group"><label for="dlg-baseurl">' +
@@ -730,6 +736,7 @@
           selectedPreset = null;
           document.getElementById("dlg-name").value = "";
           document.getElementById("dlg-protocol").value = "openai-chat";
+          document.getElementById("dlg-protocol").disabled = false;
           document.getElementById("dlg-baseurl").value = "";
           document.getElementById("dlg-model").value = "";
           document.getElementById("dlg-apikey").value = "";
@@ -743,11 +750,25 @@
           document.getElementById("dlg-baseurl").value = preset.baseUrl || "";
           document.getElementById("dlg-model").value = (preset.models && preset.models[0]) || "";
           document.getElementById("dlg-apikey").value = "";
-          // Hide protocol dropdown when preset limits to a single protocol
           var presetProtos = preset.protocols;
           var singleProto = presetProtos && presetProtos.length === 1;
-          var pgPreset = document.getElementById("dlg-protocol").closest(".form-group");
-          if (pgPreset) pgPreset.style.display = singleProto ? "none" : "";
+          var protoSelect = document.getElementById("dlg-protocol");
+          if (protoSelect) {
+            protoSelect.disabled = singleProto;
+            protoSelect.value = preset.protocol || "openai-chat";
+          }
+          // Show/hide fixed hint in label
+          var protoLabel = document.querySelector('label[for="dlg-protocol"]');
+          if (protoLabel) {
+            var existingHint = protoLabel.querySelector(".protocol-fixed-hint");
+            if (existingHint) existingHint.remove();
+            if (singleProto) {
+              var hint = document.createElement("span");
+              hint.className = "protocol-fixed-hint";
+              hint.textContent = " (" + t("presetFixed") + ")";
+              protoLabel.appendChild(hint);
+            }
+          }
         }
       });
     });
