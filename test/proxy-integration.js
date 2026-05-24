@@ -261,13 +261,21 @@ async function testThinkParserSkippedWithReasoningContent() {
 
   var events = parseSSEEvents(res.body);
   var reasoningDeltas = events
-    .filter(function (e) { return e.type === "response.reasoning_summary_text.delta"; })
-    .map(function (e) { return e.delta; });
+    .filter(function (e) {
+      return e.type === "response.reasoning_summary_text.delta";
+    })
+    .map(function (e) {
+      return e.delta;
+    });
   assert(reasoningDeltas.join("").indexOf("Let me think") !== -1, "reasoning_content forwarded as reasoning delta");
 
   var textDeltas = events
-    .filter(function (e) { return e.type === "response.output_text.delta"; })
-    .map(function (e) { return e.delta; });
+    .filter(function (e) {
+      return e.type === "response.output_text.delta";
+    })
+    .map(function (e) {
+      return e.delta;
+    });
   var fullText = textDeltas.join("");
   assert(fullText.indexOf("<thinking>") !== -1, "literal <thinking> text preserved in output");
 }
