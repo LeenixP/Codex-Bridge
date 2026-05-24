@@ -1020,7 +1020,7 @@
     var curlEl = document.getElementById("quickstart-curl");
     if (curlEl) {
       var model = providers && providers.length > 0 && providers[0].model ? providers[0].model : "MODEL_NAME";
-      curlEl.textContent = "curl " + endpoint + "/responses \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"model\":\"" + model + "\",\"input\":\"hello\",\"stream\":true}'";
+      curlEl.textContent = "curl.exe " + endpoint + "/responses -H \"Content-Type: application/json\" -d '{\"model\":\"" + model + "\",\"input\":\"hello\",\"stream\":true}'";
     }
   }
 
