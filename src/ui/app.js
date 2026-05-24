@@ -352,7 +352,7 @@
         await api.stopProxy();
         clearNeedsRestart();
       } else {
-        // Start proxy (injects config automatically)
+        // Start proxy
         await api.startProxy();
         clearNeedsRestart();
       }
