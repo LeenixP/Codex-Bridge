@@ -1321,9 +1321,13 @@ function testGetQuickPresets() {
   });
   assert(ds.models.length > 0, "deepseek has models array");
   // deepseek and kimi-coding have hooks (vendor: true), kimi uses vendor: false (no hooks)
-  var ds2 = list.find(function (p) { return p.id === "deepseek"; });
+  var ds2 = list.find(function (p) {
+    return p.id === "deepseek";
+  });
   assert(ds2.vendor === true, "deepseek is a vendor preset");
-  var kc = list.find(function (p) { return p.id === "kimi-coding"; });
+  var kc = list.find(function (p) {
+    return p.id === "kimi-coding";
+  });
   assert(kc.vendor === true, "kimi-coding is a vendor preset");
 }
 

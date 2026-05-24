@@ -74,7 +74,9 @@ function writeJsonFile(filePath, data) {
   } catch {
     // if rename fails, try direct write as fallback
     fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
-    try { fs.unlinkSync(tmpPath); } catch {}
+    try {
+      fs.unlinkSync(tmpPath);
+    } catch {}
   }
 }
 

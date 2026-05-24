@@ -195,8 +195,12 @@ function extractInputText(payload) {
       if (typeof content === "string") return content;
       if (Array.isArray(content)) {
         return content
-          .filter(function (c) { return c && (c.type === "input_text" || c.type === "output_text" || c.type === "text"); })
-          .map(function (c) { return c.text || ""; })
+          .filter(function (c) {
+            return c && (c.type === "input_text" || c.type === "output_text" || c.type === "text");
+          })
+          .map(function (c) {
+            return c.text || "";
+          })
           .join(" ");
       }
       return "";

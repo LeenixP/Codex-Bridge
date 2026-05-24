@@ -19,11 +19,7 @@ function getCodexConfigDir() {
 
 function tomlEscape(str) {
   if (!str) return "";
-  return str
-    .replace(/\\/g, "\\\\")
-    .replace(/"/g, '\\"')
-    .replace(/\n/g, "\\n")
-    .replace(/\r/g, "\\r");
+  return str.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\r/g, "\\r");
 }
 
 function atomicWriteSync(filePath, content) {
@@ -35,8 +31,11 @@ function atomicWriteSync(filePath, content) {
     const dir = path.dirname(filePath);
     const base = path.basename(filePath);
     const pattern = new RegExp("^" + base.replace(/\./g, "\\.") + "\\.backup\\.\\d+$");
-    const backups = fs.readdirSync(dir)
-      .filter(function (f) { return pattern.test(f); })
+    const backups = fs
+      .readdirSync(dir)
+      .filter(function (f) {
+        return pattern.test(f);
+      })
       .sort()
       .reverse();
     for (var i = 5; i < backups.length; i++) {
@@ -278,9 +277,7 @@ async function injectCodexConfig(proxyPort, providers) {
   // --- Apply Codex-Switch overrides ---
 
   // 1. model_provider / model
-  existing = existing
-    .replace(/^model_provider\s*=\s*.*$\n?/m, "")
-    .replace(/^model\s*=\s*.*$\n?/m, "");
+  existing = existing.replace(/^model_provider\s*=\s*.*$\n?/m, "").replace(/^model\s*=\s*.*$\n?/m, "");
   const topLevelBlock = 'model_provider = "' + tomlEscape(providerId) + '"\nmodel = "' + tomlEscape(modelName) + '"\n';
   existing = topLevelBlock + existing.replace(/^\n+/, "");
   modifications.push("model_provider → " + providerId);
@@ -314,7 +311,10 @@ async function injectCodexConfig(proxyPort, providers) {
       if (/^hooks\s*=/m.test(existing)) {
         existing = existing.replace(/^hooks\s*=\s*.*$/m, "hooks = true  # Codex-Switch: enabled for proxy compatibility");
       } else {
-        existing = existing.replace(/^(\[features\][\s\S]*?)(\n\[|$)/m, "$1hooks = true  # Codex-Switch: enabled for proxy compatibility\n$2");
+        existing = existing.replace(
+          /^(\[features\][\s\S]*?)(\n\[|$)/m,
+          "$1hooks = true  # Codex-Switch: enabled for proxy compatibility\n$2",
+        );
       }
     } else {
       existing = existing.trimEnd() + "\n\n[features]\nhooks = true  # Codex-Switch: enabled for proxy compatibility\n";
@@ -326,7 +326,10 @@ async function injectCodexConfig(proxyPort, providers) {
       if (/^computer\s*=/m.test(existing)) {
         existing = existing.replace(/^computer\s*=\s*.*$/m, "computer = true  # Codex-Switch: enabled for proxy compatibility");
       } else {
-        existing = existing.replace(/^(\[features\][\s\S]*?)(\n\[|$)/m, "$1computer = true  # Codex-Switch: enabled for proxy compatibility\n$2");
+        existing = existing.replace(
+          /^(\[features\][\s\S]*?)(\n\[|$)/m,
+          "$1computer = true  # Codex-Switch: enabled for proxy compatibility\n$2",
+        );
       }
     } else {
       existing = existing.trimEnd() + "\n\n[features]\ncomputer = true  # Codex-Switch: enabled for proxy compatibility\n";
@@ -347,14 +350,9 @@ async function injectCodexConfig(proxyPort, providers) {
     origFeaturesComputer ? '# original_features_computer = "' + tomlEscape(origFeaturesComputer) + '"' : null,
   ].filter(Boolean);
 
-  const aliasLines = [
-    '"' + tomlEscape(modelName) + '" = "' + tomlEscape(activeProvider.model || modelName) + '"',
-  ];
+  const aliasLines = ['"' + tomlEscape(modelName) + '" = "' + tomlEscape(activeProvider.model || modelName) + '"'];
 
-  const section = [
-    marker,
-    "# Codex-Switch proxy configuration",
-  ]
+  const section = [marker, "# Codex-Switch proxy configuration"]
     .concat(savedOriginals)
     .concat([
       "",
@@ -439,23 +437,14 @@ function removeCodexConfig() {
       }
 
       // preferred_auth_method — uncomment if it was commented out
-      content = content.replace(
-        /^# preferred_auth_method = "([^"]*)" {2}# Codex-Switch:.*$\n?/m,
-        'preferred_auth_method = "$1"\n',
-      );
+      content = content.replace(/^# preferred_auth_method = "([^"]*)" {2}# Codex-Switch:.*$\n?/m, 'preferred_auth_method = "$1"\n');
       if (origAuthMethod === "apikey" && !/^preferred_auth_method\s*=/m.test(content)) {
-        content = content.replace(
-          /^(model\s*=.*\n)/m,
-          '$1preferred_auth_method = "apikey"\n',
-        );
+        content = content.replace(/^(model\s*=.*\n)/m, '$1preferred_auth_method = "apikey"\n');
       }
 
       // sandbox — restore original or remove Codex-Switch managed one
       if (origSandbox) {
-        content = content.replace(
-          /sandbox\s*=\s*"[^"]*".*$/m,
-          'sandbox = "' + tomlEscape(origSandbox) + '"',
-        );
+        content = content.replace(/sandbox\s*=\s*"[^"]*".*$/m, 'sandbox = "' + tomlEscape(origSandbox) + '"');
       } else {
         // Remove Codex-Switch-added sandbox if there was no original
         content = content.replace(/^sandbox\s*=\s*"[^"]*" {2}# Codex-Switch:.*$\n?/m, "");
@@ -475,7 +464,10 @@ function removeCodexConfig() {
       // model_reasoning_effort — restore original
       if (origReasoningEffort) {
         if (/^model_reasoning_effort\s*=/m.test(content)) {
-          content = content.replace(/^model_reasoning_effort\s*=\s*.*$/m, 'model_reasoning_effort = "' + tomlEscape(origReasoningEffort) + '"');
+          content = content.replace(
+            /^model_reasoning_effort\s*=\s*.*$/m,
+            'model_reasoning_effort = "' + tomlEscape(origReasoningEffort) + '"',
+          );
         } else {
           content = content.replace(/^(model\s*=.*\n)/m, '$1model_reasoning_effort = "' + tomlEscape(origReasoningEffort) + '"\n');
         }
@@ -483,30 +475,21 @@ function removeCodexConfig() {
 
       // features.hooks — restore original
       if (origFeaturesHooks) {
-        content = content.replace(
-          /^hooks\s*=\s*true {2}# Codex-Switch:.*$\n?/m,
-          "hooks = " + origFeaturesHooks + "\n",
-        );
+        content = content.replace(/^hooks\s*=\s*true {2}# Codex-Switch:.*$\n?/m, "hooks = " + origFeaturesHooks + "\n");
       } else {
         content = content.replace(/^hooks\s*=\s*true {2}# Codex-Switch:.*$\n?/m, "");
       }
 
       // features.computer — restore original
       if (origFeaturesComputer) {
-        content = content.replace(
-          /^computer\s*=\s*true {2}# Codex-Switch:.*$\n?/m,
-          "computer = " + origFeaturesComputer + "\n",
-        );
+        content = content.replace(/^computer\s*=\s*true {2}# Codex-Switch:.*$\n?/m, "computer = " + origFeaturesComputer + "\n");
       } else {
         content = content.replace(/^computer\s*=\s*true {2}# Codex-Switch:.*$\n?/m, "");
       }
 
       // features.memories — restore original
       if (origFeaturesMemories) {
-        content = content.replace(
-          /^memories\s*=\s*(?:true|false).*$\n?/m,
-          "memories = " + origFeaturesMemories + "\n",
-        );
+        content = content.replace(/^memories\s*=\s*(?:true|false).*$\n?/m, "memories = " + origFeaturesMemories + "\n");
       }
 
       // Clean up multiple blank lines

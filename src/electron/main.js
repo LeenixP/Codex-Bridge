@@ -70,7 +70,9 @@ function registerIpcHandlers() {
   ipcMain.handle("get-providers", () => providers);
   ipcMain.handle("save-providers", (_, newProviders) => {
     if (!Array.isArray(newProviders)) return providers;
-    providers = newProviders.filter(function (p) { return p && typeof p.name === "string"; });
+    providers = newProviders.filter(function (p) {
+      return p && typeof p.name === "string";
+    });
     saveProviders(providers);
     return providers;
   });

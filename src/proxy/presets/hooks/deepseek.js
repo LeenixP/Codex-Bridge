@@ -106,7 +106,13 @@ function onMessagesBuilt(messages, requestBody, provider) {
   // Verify mapping consistency
   var expectedMsgCount = inputToMsg[inputToMsg.length - 1] !== undefined ? inputToMsg[inputToMsg.length - 1] + 1 : 0;
   if (expectedMsgCount !== messages.length) {
-    log.warn("[deepseek-hook] inputToMsg mapping mismatch: expected " + expectedMsgCount + " messages but got " + messages.length + ". Skipping thinking block injection.");
+    log.warn(
+      "[deepseek-hook] inputToMsg mapping mismatch: expected " +
+        expectedMsgCount +
+        " messages but got " +
+        messages.length +
+        ". Skipping thinking block injection.",
+    );
     return messages;
   }
 

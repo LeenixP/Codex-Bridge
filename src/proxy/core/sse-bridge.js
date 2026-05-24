@@ -250,9 +250,8 @@ function createSseBridge(res, responseId, model, traceSession, previousResponseI
     const item = toolCallItems.get(callId);
     if (!item) return;
     item.args += delta;
-    const eventName = item.itemType === "computer_call"
-      ? "response.computer_call_arguments.delta"
-      : "response.function_call_arguments.delta";
+    const eventName =
+      item.itemType === "computer_call" ? "response.computer_call_arguments.delta" : "response.function_call_arguments.delta";
     emitToClient(eventName, {
       type: eventName,
       response_id: responseId,
@@ -267,9 +266,8 @@ function createSseBridge(res, responseId, model, traceSession, previousResponseI
     const item = toolCallItems.get(callId);
     if (!item) return;
     item.args = args || item.args;
-    const doneEventName = item.itemType === "computer_call"
-      ? "response.computer_call_arguments.done"
-      : "response.function_call_arguments.done";
+    const doneEventName =
+      item.itemType === "computer_call" ? "response.computer_call_arguments.done" : "response.function_call_arguments.done";
     emitToClient(doneEventName, {
       type: doneEventName,
       response_id: responseId,

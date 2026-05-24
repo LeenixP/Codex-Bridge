@@ -132,7 +132,9 @@ function getVariantBaseUrl(provider, protocol) {
     provides a unified "Custom" button instead. */
 function getQuickPresets() {
   return Object.values(presets)
-    .filter(function (p) { return p.id !== "openai-chat" && p.id !== "anthropic"; })
+    .filter(function (p) {
+      return p.id !== "openai-chat" && p.id !== "anthropic";
+    })
     .map(function (p) {
       return {
         id: p.id,

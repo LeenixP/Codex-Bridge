@@ -2,7 +2,7 @@
 
 (function () {
   window.addEventListener("unhandledrejection", function (event) {
-    diag("Unhandled rejection: " + (event.reason ? (event.reason.message || String(event.reason)) : "unknown"));
+    diag("Unhandled rejection: " + (event.reason ? event.reason.message || String(event.reason) : "unknown"));
     console.error("Unhandled rejection:", event.reason);
   });
   const api = window.codexSwitch;
@@ -599,18 +599,24 @@
     // Determine which protocols to offer for this preset.
     // If protocols is set, only those options; otherwise show both.
     var presetProtocols = null;
-    var presetObj = selectedPreset ? PRESETS.find(function (p) { return p.id === selectedPreset; }) : null;
+    var presetObj = selectedPreset
+      ? PRESETS.find(function (p) {
+          return p.id === selectedPreset;
+        })
+      : null;
     if (presetObj && presetObj.protocols && presetObj.protocols.length > 0) {
       presetProtocols = presetObj.protocols;
     }
 
     var protocolOptionsHtml = "";
     if (presetProtocols) {
-      protocolOptionsHtml = presetProtocols.map(function (proto) {
-        var label = proto === "anthropic" ? t("protocolAnthropic") : t("protocolOpenAI");
-        var sel = data.protocol === proto ? " selected" : "";
-        return '<option value="' + proto + '"' + sel + ">" + label + "</option>";
-      }).join("");
+      protocolOptionsHtml = presetProtocols
+        .map(function (proto) {
+          var label = proto === "anthropic" ? t("protocolAnthropic") : t("protocolOpenAI");
+          var sel = data.protocol === proto ? " selected" : "";
+          return '<option value="' + proto + '"' + sel + ">" + label + "</option>";
+        })
+        .join("");
     } else {
       protocolOptionsHtml =
         '<option value="openai-chat"' +
@@ -624,9 +630,7 @@
         "</option>";
     }
     var protocolDisabled = presetProtocols && presetProtocols.length === 1;
-    var protocolHint = protocolDisabled
-      ? ' <span class="protocol-fixed-hint">(' + t("presetFixed") + ")</span>"
-      : "";
+    var protocolHint = protocolDisabled ? ' <span class="protocol-fixed-hint">(' + t("presetFixed") + ")</span>" : "";
 
     dialog.setAttribute("aria-labelledby", "dialog-title");
 
@@ -643,13 +647,7 @@
       t("presetCustom") +
       "</button>" +
       PRESETS.map(function (p, i) {
-        return (
-          '<button class="btn-preset" data-preset="' +
-          i +
-          '">' +
-          escapeHtml(p.name) +
-          "</button>"
-        );
+        return '<button class="btn-preset" data-preset="' + i + '">' + escapeHtml(p.name) + "</button>";
       }).join("") +
       "</div>" +
       '<div class="form-group"><label for="dlg-name">' +
@@ -662,7 +660,7 @@
       '<div class="form-group"><label for="dlg-protocol">' +
       t("labelProtocol") +
       protocolHint +
-      "</label><select id=\"dlg-protocol\"" +
+      '</label><select id="dlg-protocol"' +
       (protocolDisabled ? " disabled" : "") +
       ">" +
       protocolOptionsHtml +
@@ -775,7 +773,7 @@
 
     // Highlight the active preset button when editing
     if (selectedPreset) {
-      const presetBtns = dialog.querySelectorAll(".btn-preset:not([data-preset=\"custom\"])");
+      const presetBtns = dialog.querySelectorAll('.btn-preset:not([data-preset="custom"])');
       presetBtns.forEach((btn) => {
         const preset = PRESETS[Number(btn.dataset.preset)];
         if (preset && preset.id === selectedPreset) {

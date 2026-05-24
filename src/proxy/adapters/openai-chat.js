@@ -157,14 +157,16 @@ function convertInputToMessages(requestBody, provider) {
       } else if (item.type === "web_search_call") {
         messages.push({
           role: "assistant",
-          tool_calls: [{
-            id: item.call_id || "ws_" + Math.random().toString(36).slice(2, 10),
-            type: "function",
-            function: {
-              name: "web_search",
-              arguments: JSON.stringify(item.action || {}),
+          tool_calls: [
+            {
+              id: item.call_id || "ws_" + Math.random().toString(36).slice(2, 10),
+              type: "function",
+              function: {
+                name: "web_search",
+                arguments: JSON.stringify(item.action || {}),
+              },
             },
-          }],
+          ],
         });
       } else if (item.type === "web_search_call_output") {
         messages.push({
@@ -175,14 +177,16 @@ function convertInputToMessages(requestBody, provider) {
       } else if (item.type === "custom_tool_call") {
         messages.push({
           role: "assistant",
-          tool_calls: [{
-            id: item.call_id || "ct_" + Math.random().toString(36).slice(2, 10),
-            type: "function",
-            function: {
-              name: item.name || "custom_tool",
-              arguments: typeof item.input === "string" ? item.input : JSON.stringify(item.input || {}),
+          tool_calls: [
+            {
+              id: item.call_id || "ct_" + Math.random().toString(36).slice(2, 10),
+              type: "function",
+              function: {
+                name: item.name || "custom_tool",
+                arguments: typeof item.input === "string" ? item.input : JSON.stringify(item.input || {}),
+              },
             },
-          }],
+          ],
         });
       } else if (item.type === "custom_tool_call_output") {
         messages.push({
@@ -244,8 +248,12 @@ function convertMessageItem(item, provider) {
     // Join multiple text parts so composite instructions work correctly.
     if (role === "system") {
       var joined = parts
-        .filter(function (p) { return p.type === "text"; })
-        .map(function (p) { return p.text; })
+        .filter(function (p) {
+          return p.type === "text";
+        })
+        .map(function (p) {
+          return p.text;
+        })
         .join("\n\n");
       return { role: "system", content: joined || "" };
     }
@@ -274,14 +282,16 @@ function convertTools(tools) {
   return tools.flatMap((t) => {
     if (!t) return [];
     if (t.type === "function" || t.type === "custom") {
-      return [{
-        type: "function",
-        function: {
-          name: t.name,
-          description: t.description || "",
-          parameters: t.parameters || t.input_schema || {},
+      return [
+        {
+          type: "function",
+          function: {
+            name: t.name,
+            description: t.description || "",
+            parameters: t.parameters || t.input_schema || {},
+          },
         },
-      }];
+      ];
     }
     if (t.type === "namespace" && Array.isArray(t.tools)) {
       return t.tools

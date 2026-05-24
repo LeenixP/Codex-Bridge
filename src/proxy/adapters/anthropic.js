@@ -92,7 +92,12 @@ function buildUpstreamRequest(requestBody, provider, _settings) {
     payload.tools = convertTools(requestBody.tools);
     if (payload.tools.length === 0) delete payload.tools;
     // Add computer-use beta header when computer tools are present
-    if (payload.tools && payload.tools.some(function (t) { return t.type === "computer_20250124"; })) {
+    if (
+      payload.tools &&
+      payload.tools.some(function (t) {
+        return t.type === "computer_20250124";
+      })
+    ) {
       payload._betas.push("computer-use-2025-01-24");
     }
   }
@@ -356,7 +361,7 @@ function convertInputToMessages(requestBody, provider) {
         const toolResult = {
           type: "tool_result",
           tool_use_id: item.call_id || item.id,
-          content: content.length > 0 ? content : (typeof output === "string" ? output : JSON.stringify(output || {})),
+          content: content.length > 0 ? content : typeof output === "string" ? output : JSON.stringify(output || {}),
         };
         const last = messages[messages.length - 1];
         if (last && last.role === "user") {
@@ -450,11 +455,13 @@ function convertTools(tools) {
   return tools.flatMap((t) => {
     if (!t) return [];
     if (t.type === "function" || t.type === "custom") {
-      return [{
-        name: t.name,
-        description: t.description || "",
-        input_schema: t.parameters || t.input_schema || { type: "object", properties: {} },
-      }];
+      return [
+        {
+          name: t.name,
+          description: t.description || "",
+          input_schema: t.parameters || t.input_schema || { type: "object", properties: {} },
+        },
+      ];
     }
     if (t.type === "namespace" && Array.isArray(t.tools)) {
       return t.tools
@@ -466,13 +473,15 @@ function convertTools(tools) {
         }));
     }
     if (t.type === "computer_use" || t.type === "computer") {
-      return [{
-        type: "computer_20250124",
-        name: t.name || "computer",
-        display_width_px: t.display_width || t.display_width_px || 1024,
-        display_height_px: t.display_height || t.display_height_px || 768,
-        display_number: t.display_number !== undefined ? t.display_number : 1,
-      }];
+      return [
+        {
+          type: "computer_20250124",
+          name: t.name || "computer",
+          display_width_px: t.display_width || t.display_width_px || 1024,
+          display_height_px: t.display_height || t.display_height_px || 768,
+          display_number: t.display_number !== undefined ? t.display_number : 1,
+        },
+      ];
     }
     return [];
   });
