@@ -1010,17 +1010,17 @@
     var modelsEl = document.getElementById("quickstart-models");
     if (!modelsEl) return;
     if (!providers || providers.length === 0) {
-      modelsEl.innerHTML = '<p>' + t("noProviders") + '</p>';
+      modelsEl.innerHTML = "<p>" + t("noProviders") + "</p>";
     } else {
       modelsEl.innerHTML = providers.map(function (p) {
-        return '<span style="display:inline-block;padding:4px 10px;margin:3px;background:var(--ctrl-bg);border-radius:4px;font-family:monospace;font-size:13px">' + escapeHtml(p.model || "?") + '</span>';
+        return "<span style=\"display:inline-block;padding:4px 10px;margin:3px;background:var(--ctrl-bg);border-radius:4px;font-family:monospace;font-size:13px\">" + escapeHtml(p.model || "?") + "</span>";
       }).join("");
     }
 
     var curlEl = document.getElementById("quickstart-curl");
     if (curlEl) {
       var model = providers && providers.length > 0 && providers[0].model ? providers[0].model : "MODEL_NAME";
-      curlEl.textContent = 'curl ' + endpoint + '/responses \\\n  -H "Content-Type: application/json" \\\n  -d \'{"model":"' + model + '","input":"hello","stream":true}\'';
+      curlEl.textContent = "curl " + endpoint + "/responses \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"model\":\"" + model + "\",\"input\":\"hello\",\"stream\":true}'";
     }
   }
 
