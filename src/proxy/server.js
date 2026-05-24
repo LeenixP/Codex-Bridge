@@ -79,6 +79,9 @@ function getLastError() {
 }
 
 async function handleRequest(req, res, settings, providers) {
+  // Raw log at earliest possible point — before any processing
+  log.info("RAW " + req.method + " " + (req.url || "?") + " from " + (req.socket.remoteAddress || "?"));
+
   const url = new URL(req.url, "http://" + (req.headers.host || "localhost"));
   const pathname = url.pathname;
 
