@@ -131,7 +131,7 @@ function delay(ms) {
 async function testAnthropicSync() {
   console.log("\n[Test] Responses (sync, Anthropic)");
   const body = JSON.stringify({
-    model: "claude-sonnet-4-20250514",
+    model: "anth/claude-sonnet-4-20250514",
     input: "Say hello",
     instructions: "You are helpful.",
     stream: false,
@@ -163,7 +163,7 @@ async function testAnthropicSync() {
 async function testAnthropicStream() {
   console.log("\n[Test] Responses (stream, Anthropic with thinking)");
   const body = JSON.stringify({
-    model: "claude-sonnet-4-20250514",
+    model: "anth/claude-sonnet-4-20250514",
     input: "Say hello",
     instructions: "You are helpful.",
     stream: true,
@@ -242,18 +242,18 @@ async function testAnthropicToolUse() {
   const toolProviders = [
     {
       name: "Test Anthropic",
+      key: "anth",
       protocol: "anthropic",
       baseUrl: "http://127.0.0.1:" + MOCK_PORT,
       apiKey: "test-key",
-      model: "claude-sonnet-4-20250514",
-      active: true,
+      models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }],
     },
   ];
   await createProxyServer({ port: PROXY_PORT, host: "127.0.0.1" }, toolProviders);
   await delay(200);
 
   const body = JSON.stringify({
-    model: "claude-sonnet-4-20250514",
+    model: "anth/claude-sonnet-4-20250514",
     input: "Search for hello world",
     stream: false,
     tools: [
@@ -297,11 +297,11 @@ async function main() {
   const providers = [
     {
       name: "Test Anthropic",
+      key: "anth",
       protocol: "anthropic",
       baseUrl: "http://127.0.0.1:" + MOCK_PORT,
       apiKey: "test-key",
-      model: "claude-sonnet-4-20250514",
-      active: true,
+      models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }],
     },
   ];
 

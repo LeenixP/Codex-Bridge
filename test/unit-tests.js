@@ -8,6 +8,7 @@ const reasoningCache = require("../src/proxy/core/reasoning-cache");
 const { makeId, createSequence, emitSse } = require("../src/shared/http");
 const { parseSSEStream } = require("../src/shared/stream");
 const presets = require("../src/proxy/presets/index");
+const { migrateProvider, getProviderByModel } = require("../src/shared/config");
 
 let passed = 0;
 let failed = 0;
@@ -94,7 +95,12 @@ function parseSseResponse(res) {
 
 function testOpenAIChatStringInput() {
   console.log("\n[Test] openai-chat: string input -> single user message");
-  const payload = openai.buildUpstreamRequest({ model: "gpt-4o", input: "Hello world" }, { model: "gpt-4o" }, {});
+  const payload = openai.buildUpstreamRequest(
+    { model: "gpt-4o", input: "Hello world" },
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] },
+    {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
+  );
   assert(payload.messages.length === 1, "one message");
   assert(payload.messages[0].role === "user", "role is user");
   assert(payload.messages[0].content === "Hello world", "content matches");
@@ -111,8 +117,9 @@ function testOpenAIChatArrayInputRoleBased() {
         { role: "user", content: "Follow up" },
       ],
     },
-    { model: "gpt-4o" },
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
   );
   assert(payload.messages.length === 3, "three messages");
   assert(payload.messages[0].role === "user", "first role is user");
@@ -129,8 +136,9 @@ function testOpenAIChatArrayInputMessageType() {
       model: "gpt-4o",
       input: [{ type: "message", role: "user", content: "Hello from message type" }],
     },
-    { model: "gpt-4o" },
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
   );
   assert(payload.messages.length === 1, "one message");
   assert(payload.messages[0].role === "user", "role is user");
@@ -145,8 +153,9 @@ function testOpenAIChatInstructions() {
       input: "Hello",
       instructions: "You are a helpful assistant.",
     },
-    { model: "gpt-4o" },
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
   );
   assert(payload.messages.length === 2, "two messages (system + user)");
   assert(payload.messages[0].role === "system", "first message is system");
@@ -156,26 +165,46 @@ function testOpenAIChatInstructions() {
 
 function testOpenAIChatMaxOutputTokens() {
   console.log("\n[Test] openai-chat: max_output_tokens -> max_completion_tokens");
-  const payload = openai.buildUpstreamRequest({ model: "gpt-4o", input: "Hi", max_output_tokens: 4096 }, { model: "gpt-4o" }, {});
+  const payload = openai.buildUpstreamRequest(
+    { model: "gpt-4o", input: "Hi", max_output_tokens: 4096 },
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] },
+    {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
+  );
   assert(payload.max_completion_tokens === 4096, "max_completion_tokens set");
 }
 
 function testOpenAIChatTemperatureTopP() {
   console.log("\n[Test] openai-chat: temperature and top_p passthrough");
-  const payload = openai.buildUpstreamRequest({ model: "gpt-4o", input: "Hi", temperature: 0.7, top_p: 0.9 }, { model: "gpt-4o" }, {});
+  const payload = openai.buildUpstreamRequest(
+    { model: "gpt-4o", input: "Hi", temperature: 0.7, top_p: 0.9 },
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] },
+    {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
+  );
   assert(payload.temperature === 0.7, "temperature passthrough");
   assert(payload.top_p === 0.9, "top_p passthrough");
 }
 
 function testOpenAIChatTemperatureZero() {
   console.log("\n[Test] openai-chat: temperature=0 passes through");
-  const payload = openai.buildUpstreamRequest({ model: "gpt-4o", input: "Hi", temperature: 0 }, { model: "gpt-4o" }, {});
+  const payload = openai.buildUpstreamRequest(
+    { model: "gpt-4o", input: "Hi", temperature: 0 },
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] },
+    {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
+  );
   assert(payload.temperature === 0, "temperature=0 preserved (not skipped)");
 }
 
 function testOpenAIChatReasoningEffort() {
   console.log("\n[Test] openai-chat: reasoning.effort -> reasoning_effort");
-  const payload = openai.buildUpstreamRequest({ model: "o1", input: "Solve this", reasoning: { effort: "high" } }, { model: "o1" }, {});
+  const payload = openai.buildUpstreamRequest(
+    { model: "o1", input: "Solve this", reasoning: { effort: "high" } },
+    { models: [{ id: "o1", maxOutputK: 64, maxContextK: 128 }] },
+    {},
+    { id: "o1", maxOutputK: 64, maxContextK: 128 },
+  );
   assert(payload.reasoning_effort === "high", "reasoning_effort set");
 }
 
@@ -187,8 +216,9 @@ function testOpenAIChatJsonObjectFormat() {
       input: "Return JSON",
       text: { format: { type: "json_object" } },
     },
-    { model: "gpt-4o" },
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
   );
   assert(payload.response_format !== undefined, "has response_format");
   assert(payload.response_format.type === "json_object", "type is json_object");
@@ -203,8 +233,9 @@ function testOpenAIChatJsonSchemaFormat() {
       input: "Return JSON",
       text: { format: { type: "json_schema", name: "person", strict: true, schema } },
     },
-    { model: "gpt-4o" },
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
   );
   assert(payload.response_format.type === "json_schema", "type is json_schema");
   assert(payload.response_format.json_schema.name === "person", "name preserved");
@@ -227,8 +258,9 @@ function testOpenAIChatTools() {
         },
       ],
     },
-    { model: "gpt-4o" },
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
   );
   assert(Array.isArray(payload.tools) && payload.tools.length === 1, "has one tool");
   assert(payload.tools[0].type === "function", "tool type is function");
@@ -248,8 +280,9 @@ function testOpenAIChatToolsFiltersNonFunction() {
         { type: "web_search", name: "search" },
       ],
     },
-    { model: "gpt-4o" },
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
   );
   assert(payload.tools.length === 1, "only function tools kept");
   assert(payload.tools[0].function.name === "valid", "correct tool kept");
@@ -262,8 +295,9 @@ function testOpenAIChatFunctionCallInput() {
       model: "gpt-4o",
       input: [{ type: "function_call", call_id: "call_abc", name: "get_weather", arguments: '{"city":"NYC"}' }],
     },
-    { model: "gpt-4o" },
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
   );
   assert(payload.messages.length === 1, "one message");
   const msg = payload.messages[0];
@@ -282,8 +316,9 @@ function testOpenAIChatFunctionCallOutputInput() {
       model: "gpt-4o",
       input: [{ type: "function_call_output", call_id: "call_abc", output: "Sunny, 72F" }],
     },
-    { model: "gpt-4o" },
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
   );
   const msg = payload.messages[0];
   assert(msg.role === "tool", "role is tool");
@@ -298,8 +333,9 @@ function testOpenAIChatFunctionCallOutputObject() {
       model: "gpt-4o",
       input: [{ type: "function_call_output", call_id: "call_abc", output: { temp: 72, condition: "sunny" } }],
     },
-    { model: "gpt-4o" },
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
   );
   const msg = payload.messages[0];
   assert(msg.role === "tool", "role is tool");
@@ -323,8 +359,9 @@ function testOpenAIChatImageUrlNonBase64() {
         },
       ],
     },
-    { model: "gpt-4o" },
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
   );
   const lastMsg = payload.messages[payload.messages.length - 1];
   assert(Array.isArray(lastMsg.content), "content is array");
@@ -350,8 +387,9 @@ function testOpenAIChatImageUrlBase64() {
         },
       ],
     },
-    { model: "gpt-4o" },
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
   );
   const lastMsg = payload.messages[payload.messages.length - 1];
   const imgPart = lastMsg.content.find(function (p) {
@@ -373,8 +411,9 @@ function testOpenAIChatSingleTextPartFlat() {
         },
       ],
     },
-    { model: "gpt-4o" },
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
   );
   const lastMsg = payload.messages[payload.messages.length - 1];
   assert(typeof lastMsg.content === "string", "content is string (not array)");
@@ -383,13 +422,23 @@ function testOpenAIChatSingleTextPartFlat() {
 
 function testOpenAIChatEmptyInput() {
   console.log("\n[Test] openai-chat: empty input -> empty messages array");
-  const payload = openai.buildUpstreamRequest({ model: "gpt-4o", input: "" }, { model: "gpt-4o" }, {});
+  const payload = openai.buildUpstreamRequest(
+    { model: "gpt-4o", input: "" },
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] },
+    {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
+  );
   assert(payload.messages.length === 0, "no messages for empty string input");
 }
 
 function testOpenAIChatEmptyInputArray() {
   console.log("\n[Test] openai-chat: empty input array -> empty messages");
-  const payload = openai.buildUpstreamRequest({ model: "gpt-4o", input: [] }, { model: "gpt-4o" }, {});
+  const payload = openai.buildUpstreamRequest(
+    { model: "gpt-4o", input: [] },
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] },
+    {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
+  );
   assert(payload.messages.length === 0, "no messages for empty array input");
 }
 
@@ -408,8 +457,9 @@ function testOpenAIChatVisionFalse() {
         },
       ],
     },
-    { model: "gpt-4o", vision: false },
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }], vision: false },
     {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
   );
   const lastMsg = payload.messages[payload.messages.length - 1];
   assert(typeof lastMsg.content === "string", "content flattens to string (no image)");
@@ -418,12 +468,17 @@ function testOpenAIChatVisionFalse() {
 
 function testOpenAIChatMissingOptionalFields() {
   console.log("\n[Test] openai-chat: missing optional fields produce clean payload");
-  const payload = openai.buildUpstreamRequest({ model: "gpt-4o", input: "Hi" }, { model: "gpt-4o" }, {});
+  const payload = openai.buildUpstreamRequest(
+    { model: "gpt-4o", input: "Hi" },
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] },
+    {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
+  );
   assert(payload.model === "gpt-4o", "model set");
   assert(payload.stream === true, "stream defaults to true");
   assert(payload.temperature === undefined, "no temperature when absent");
   assert(payload.top_p === undefined, "no top_p when absent");
-  assert(payload.max_completion_tokens === undefined, "no max_completion_tokens when absent");
+  assert(payload.max_completion_tokens === 65536, "max_completion_tokens from modelConfig");
   assert(payload.reasoning_effort === undefined, "no reasoning_effort when absent");
   assert(payload.response_format === undefined, "no response_format when absent");
   assert(payload.tools === undefined, "no tools when absent");
@@ -431,19 +486,34 @@ function testOpenAIChatMissingOptionalFields() {
 
 function testOpenAIChatStreamExplicitFalse() {
   console.log("\n[Test] openai-chat: stream:false respected");
-  const payload = openai.buildUpstreamRequest({ model: "gpt-4o", input: "Hi", stream: false }, { model: "gpt-4o" }, {});
+  const payload = openai.buildUpstreamRequest(
+    { model: "gpt-4o", input: "Hi", stream: false },
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] },
+    {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
+  );
   assert(payload.stream === false, "stream is false");
 }
 
 function testOpenAIChatProviderModelOverride() {
-  console.log("\n[Test] openai-chat: provider.model overrides requestBody.model");
-  const payload = openai.buildUpstreamRequest({ model: "override-me", input: "Hi" }, { model: "gpt-4o" }, {});
-  assert(payload.model === "gpt-4o", "provider model used");
+  console.log("\n[Test] openai-chat: modelConfig.id overrides requestBody.model");
+  const payload = openai.buildUpstreamRequest(
+    { model: "override-me", input: "Hi" },
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] },
+    {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
+  );
+  assert(payload.model === "gpt-4o", "modelConfig model used");
 }
 
 function testOpenAIChatStringInArray() {
   console.log("\n[Test] openai-chat: plain string inside input array");
-  const payload = openai.buildUpstreamRequest({ model: "gpt-4o", input: ["Hello", "World"] }, { model: "gpt-4o" }, {});
+  const payload = openai.buildUpstreamRequest(
+    { model: "gpt-4o", input: ["Hello", "World"] },
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] },
+    {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
+  );
   assert(payload.messages.length === 2, "two messages");
   assert(payload.messages[0].content === "Hello", "first string");
   assert(payload.messages[1].content === "World", "second string");
@@ -457,8 +527,9 @@ function testAnthropicInstructions() {
   console.log("\n[Test] anthropic: instructions -> system field");
   const req = anthropic.buildUpstreamRequest(
     { model: "claude-sonnet-4-20250514", input: "Hello", instructions: "Be helpful." },
-    { model: "claude-sonnet-4-20250514" },
+    { models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 },
   );
   assert(req.system === "Be helpful.", "system matches instructions");
   assert(req.messages.length === 1, "one user message");
@@ -475,8 +546,9 @@ function testAnthropicSystemRoleInput() {
         { role: "user", content: "Bonjour" },
       ],
     },
-    { model: "claude-sonnet-4-20250514" },
+    { models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 },
   );
   assert(req.system === "Speak French.", "system extracted from input");
   assert(req.messages.length === 1, "only user message in messages");
@@ -494,8 +566,9 @@ function testAnthropicSystemMerged() {
       ],
       instructions: "Be polite.",
     },
-    { model: "claude-sonnet-4-20250514" },
+    { models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 },
   );
   assert(req.system.indexOf("Be polite.") !== -1, "system contains instructions");
   assert(req.system.indexOf("Speak French.") !== -1, "system contains input system message");
@@ -507,8 +580,9 @@ function testAnthropicReasoningLow() {
   console.log("\n[Test] anthropic: reasoning.effort=low -> budget_tokens=2000");
   const req = anthropic.buildUpstreamRequest(
     { model: "claude-sonnet-4-20250514", input: "Hi", reasoning: { effort: "low" } },
-    { model: "claude-sonnet-4-20250514" },
+    { models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 },
   );
   assert(req.thinking.budget_tokens === 2000, "low = 2000");
   assert(req.thinking.type === "enabled", "thinking enabled");
@@ -519,8 +593,9 @@ function testAnthropicReasoningMedium() {
   console.log("\n[Test] anthropic: reasoning.effort=medium -> budget_tokens=8000");
   const req = anthropic.buildUpstreamRequest(
     { model: "claude-sonnet-4-20250514", input: "Hi", reasoning: { effort: "medium" } },
-    { model: "claude-sonnet-4-20250514" },
+    { models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 },
   );
   assert(req.thinking.budget_tokens === 8000, "medium = 8000");
 }
@@ -529,8 +604,9 @@ function testAnthropicReasoningHigh() {
   console.log("\n[Test] anthropic: reasoning.effort=high -> budget_tokens=16000");
   const req = anthropic.buildUpstreamRequest(
     { model: "claude-sonnet-4-20250514", input: "Hi", reasoning: { effort: "high" } },
-    { model: "claude-sonnet-4-20250514" },
+    { models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 },
   );
   assert(req.thinking.budget_tokens === 16000, "high = 16000");
 }
@@ -544,8 +620,9 @@ function testAnthropicReasoningXhigh() {
       max_output_tokens: 8192,
       reasoning: { effort: "xhigh" },
     },
-    { model: "claude-sonnet-4-20250514" },
+    { models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 },
   );
   assert(req.thinking.budget_tokens === 8191, "xhigh = max_tokens - 1 when max_tokens < 32000");
 }
@@ -559,8 +636,9 @@ function testAnthropicReasoningXhighLargeTokens() {
       max_output_tokens: 100000,
       reasoning: { effort: "xhigh" },
     },
-    { model: "claude-sonnet-4-20250514" },
+    { models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 },
   );
   assert(req.thinking.budget_tokens === 32000, "xhigh capped at 32000");
 }
@@ -574,8 +652,9 @@ function testAnthropicReasoningMax() {
       max_output_tokens: 8192,
       reasoning: { effort: "max" },
     },
-    { model: "claude-sonnet-4-20250514" },
+    { models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 },
   );
   assert(req.thinking.budget_tokens === 8191, "max = max_tokens - 1 (same as xhigh)");
   assert(req.thinking.type === "enabled", "thinking enabled for max");
@@ -583,7 +662,12 @@ function testAnthropicReasoningMax() {
 
 function testAnthropicNoReasoning() {
   console.log("\n[Test] anthropic: no reasoning -> no thinking block");
-  const req = anthropic.buildUpstreamRequest({ model: "claude-sonnet-4-20250514", input: "Hi" }, { model: "claude-sonnet-4-20250514" }, {});
+  const req = anthropic.buildUpstreamRequest(
+    { model: "claude-sonnet-4-20250514", input: "Hi" },
+    { models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }] },
+    {},
+    { id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 },
+  );
   assert(req.thinking === undefined, "no thinking block");
 }
 
@@ -602,8 +686,9 @@ function testAnthropicTools() {
         },
       ],
     },
-    { model: "claude-sonnet-4-20250514" },
+    { models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 },
   );
   assert(Array.isArray(req.tools) && req.tools.length === 1, "has one tool");
   assert(req.tools[0].name === "get_weather", "tool name matches");
@@ -618,8 +703,9 @@ function testAnthropicFunctionCall() {
       model: "claude-sonnet-4-20250514",
       input: [{ type: "function_call", call_id: "call_123", name: "get_weather", arguments: '{"city":"London"}' }],
     },
-    { model: "claude-sonnet-4-20250514" },
+    { models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 },
   );
   const asst = req.messages.find(function (m) {
     return m.role === "assistant";
@@ -639,8 +725,9 @@ function testAnthropicFunctionCallOutput() {
       model: "claude-sonnet-4-20250514",
       input: [{ type: "function_call_output", call_id: "call_123", output: "sunny" }],
     },
-    { model: "claude-sonnet-4-20250514" },
+    { models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 },
   );
   const userMsg = req.messages.find(function (m) {
     return m.role === "user";
@@ -663,8 +750,9 @@ function testAnthropicFunctionCallMerge() {
         { type: "function_call", call_id: "call_1", name: "get_weather", arguments: '{"city":"Paris"}' },
       ],
     },
-    { model: "claude-sonnet-4-20250514" },
+    { models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 },
   );
   const asst = req.messages.find(function (m) {
     return m.role === "assistant";
@@ -687,8 +775,9 @@ function testAnthropicFunctionCallOutputMerge() {
         { type: "function_call_output", call_id: "call_1", output: "72F sunny" },
       ],
     },
-    { model: "claude-sonnet-4-20250514" },
+    { models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 },
   );
   const userMsg = req.messages.find(function (m) {
     return m.role === "user";
@@ -716,8 +805,9 @@ function testAnthropicImageDataUri() {
         },
       ],
     },
-    { model: "claude-sonnet-4-20250514" },
+    { models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 },
   );
   const lastMsg = req.messages[req.messages.length - 1];
   assert(Array.isArray(lastMsg.content), "content is array");
@@ -745,8 +835,9 @@ function testAnthropicImageHttpUrl() {
         },
       ],
     },
-    { model: "claude-sonnet-4-20250514" },
+    { models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 },
   );
   const lastMsg = req.messages[req.messages.length - 1];
   assert(typeof lastMsg.content === "string", "non-data URI skipped, flattens to string");
@@ -760,8 +851,9 @@ function testAnthropicSingleTextFlat() {
       model: "claude-sonnet-4-20250514",
       input: [{ role: "user", content: [{ type: "input_text", text: "Hello" }] }],
     },
-    { model: "claude-sonnet-4-20250514" },
+    { models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 },
   );
   const lastMsg = req.messages[req.messages.length - 1];
   assert(typeof lastMsg.content === "string", "flattens to string");
@@ -772,8 +864,9 @@ function testAnthropicStringInput() {
   console.log("\n[Test] anthropic: string input -> single user message");
   const req = anthropic.buildUpstreamRequest(
     { model: "claude-sonnet-4-20250514", input: "Hello" },
-    { model: "claude-sonnet-4-20250514" },
+    { models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 },
   );
   assert(req.messages.length === 1, "one message");
   assert(req.messages[0].role === "user", "role is user");
@@ -781,9 +874,14 @@ function testAnthropicStringInput() {
 }
 
 function testAnthropicDefaultMaxTokens() {
-  console.log("\n[Test] anthropic: default max_tokens=8192");
-  const req = anthropic.buildUpstreamRequest({ model: "claude-sonnet-4-20250514", input: "Hi" }, { model: "claude-sonnet-4-20250514" }, {});
-  assert(req.max_tokens === 8192, "default max_tokens is 8192");
+  console.log("\n[Test] anthropic: default max_tokens=65536");
+  const req = anthropic.buildUpstreamRequest(
+    { model: "claude-sonnet-4-20250514", input: "Hi" },
+    { models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }] },
+    {},
+    { id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 },
+  );
+  assert(req.max_tokens === 65536, "default max_tokens is 65536");
 }
 
 function testAnthropicMessageTypeSystem() {
@@ -796,8 +894,9 @@ function testAnthropicMessageTypeSystem() {
         { type: "message", role: "user", content: "Write a haiku" },
       ],
     },
-    { model: "claude-sonnet-4-20250514" },
+    { models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 },
   );
   assert(req.system === "You are a poet.", "system from message-type");
   assert(req.messages.length === 1, "one user message");
@@ -1357,7 +1456,71 @@ function testGetHooksNull() {
 }
 
 // ===========================================================================
-// 9. Edge cases
+// 9. Config tests (migrateProvider, getProviderByModel)
+// ===========================================================================
+
+function testMigrateProviderWithModel() {
+  console.log("\n[Test] config: migrateProvider converts { model } to { models }");
+  const p = { name: "Test", model: "gpt-4o", apiKey: "key" };
+  const result = migrateProvider(p);
+  assert(result.models && Array.isArray(result.models), "has models array");
+  assert(result.models.length === 1, "one model entry");
+  assert(result.models[0].id === "gpt-4o", "model id preserved");
+  assert(result.models[0].maxOutputK === 64, "default maxOutputK");
+  assert(result.models[0].maxContextK === 128, "default maxContextK");
+  assert(result.model === undefined, "model field removed");
+  assert(result.name === "Test", "other fields preserved");
+}
+
+function testMigrateProviderAlreadyMigrated() {
+  console.log("\n[Test] config: migrateProvider skips already-migrated providers");
+  const p = { name: "Test", models: [{ id: "gpt-4o", maxOutputK: 32, maxContextK: 64 }] };
+  const result = migrateProvider(p);
+  assert(result === p, "same object returned");
+  assert(result.models[0].maxOutputK === 32, "existing maxOutputK preserved");
+}
+
+function testMigrateProviderNoModel() {
+  console.log("\n[Test] config: migrateProvider with no model creates empty models array");
+  const p = { name: "Test" };
+  const result = migrateProvider(p);
+  assert(Array.isArray(result.models) && result.models.length === 0, "empty models array");
+  assert(result.model === undefined, "model field not present");
+}
+
+function testGetProviderByModelMatch() {
+  console.log("\n[Test] config: getProviderByModel returns { provider, modelConfig }");
+  const providers = [{ name: "P1", key: "p1", models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] }];
+  const result = getProviderByModel(providers, "p1/gpt-4o");
+  assert(result !== null, "result found");
+  assert(result.provider.name === "P1", "provider correct");
+  assert(result.modelConfig.id === "gpt-4o", "modelConfig id correct");
+  assert(result.modelConfig.maxOutputK === 64, "modelConfig maxOutputK correct");
+}
+
+function testGetProviderByModelFallback() {
+  console.log("\n[Test] config: getProviderByModel returns null for unknown model");
+  const providers = [{ name: "P1", key: "p1", models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] }];
+  const result = getProviderByModel(providers, "unknown-model");
+  assert(result === null, "null for unknown model (no fallback)");
+}
+
+function testGetProviderByModelLegacyNoKey() {
+  console.log("\n[Test] config: getProviderByModel matches plain modelId (no slash, backward compat)");
+  const providers = [{ name: "P1", key: "p1", models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] }];
+  const result = getProviderByModel(providers, "gpt-4o");
+  assert(result !== null, "result found via plain modelId");
+  assert(result.provider.key === "p1", "provider correct");
+}
+
+function testGetProviderByModelEmpty() {
+  console.log("\n[Test] config: getProviderByModel returns null for empty providers");
+  const result = getProviderByModel([], "gpt-4o");
+  assert(result === null, "null for empty array");
+}
+
+// ===========================================================================
+// 10. Edge cases
 // ===========================================================================
 
 function testOpenAIChatEmptyContentParts() {
@@ -1367,8 +1530,9 @@ function testOpenAIChatEmptyContentParts() {
       model: "gpt-4o",
       input: [{ role: "user", content: [] }],
     },
-    { model: "gpt-4o" },
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
   );
   const msg = payload.messages[0];
   assert(msg.role === "user", "role is user");
@@ -1382,8 +1546,9 @@ function testOpenAIChatUndefinedContent() {
       model: "gpt-4o",
       input: [null, undefined, { role: "user", content: "valid" }],
     },
-    { model: "gpt-4o" },
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
   );
   assert(payload.messages.length === 1, "null/undefined items skipped");
   assert(payload.messages[0].content === "valid", "valid message kept");
@@ -1391,13 +1556,23 @@ function testOpenAIChatUndefinedContent() {
 
 function testOpenAIChatEmptyToolsArray() {
   console.log("\n[Test] edge: openai-chat empty tools array -> no tools field");
-  const payload = openai.buildUpstreamRequest({ model: "gpt-4o", input: "Hi", tools: [] }, { model: "gpt-4o" }, {});
+  const payload = openai.buildUpstreamRequest(
+    { model: "gpt-4o", input: "Hi", tools: [] },
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] },
+    {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
+  );
   assert(payload.tools === undefined, "no tools when array empty");
 }
 
 function testUnicodeText() {
   console.log("\n[Test] edge: unicode text handled correctly");
-  const payload = openai.buildUpstreamRequest({ model: "gpt-4o", input: "你好 世界" }, { model: "gpt-4o" }, {});
+  const payload = openai.buildUpstreamRequest(
+    { model: "gpt-4o", input: "你好 世界" },
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] },
+    {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
+  );
   assert(payload.messages[0].content === "你好 世界", "Chinese text preserved");
 }
 
@@ -1408,8 +1583,9 @@ function testUnicodeTextInParts() {
       model: "gpt-4o",
       input: [{ role: "user", content: [{ type: "input_text", text: "éàü" }] }],
     },
-    { model: "gpt-4o" },
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
   );
   assert(payload.messages[0].content === "éàü", "accented chars preserved");
 }
@@ -1418,8 +1594,9 @@ function testAnthropicTemperatureZero() {
   console.log("\n[Test] edge: anthropic temperature=0 passes through");
   const req = anthropic.buildUpstreamRequest(
     { model: "claude-sonnet-4-20250514", input: "Hi", temperature: 0 },
-    { model: "claude-sonnet-4-20250514" },
+    { models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 },
   );
   assert(req.temperature === 0, "temperature=0 preserved");
 }
@@ -1428,21 +1605,22 @@ function testAnthropicStreamExplicitFalse() {
   console.log("\n[Test] edge: anthropic stream:false respected");
   const req = anthropic.buildUpstreamRequest(
     { model: "claude-sonnet-4-20250514", input: "Hi", stream: false },
-    { model: "claude-sonnet-4-20250514" },
+    { models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 },
   );
   assert(req.stream === false, "stream is false");
 }
 
 function testOpenAIChatNoProviderModel() {
   console.log("\n[Test] edge: openai-chat uses requestBody.model when provider.model absent");
-  const payload = openai.buildUpstreamRequest({ model: "my-model", input: "Hi" }, {}, {});
+  const payload = openai.buildUpstreamRequest({ model: "my-model", input: "Hi" }, {}, {}, undefined);
   assert(payload.model === "my-model", "falls back to requestBody.model");
 }
 
 function testAnthropicNoProviderModel() {
   console.log("\n[Test] edge: anthropic uses requestBody.model when provider.model absent");
-  const req = anthropic.buildUpstreamRequest({ model: "my-claude", input: "Hi" }, {}, {});
+  const req = anthropic.buildUpstreamRequest({ model: "my-claude", input: "Hi" }, {}, {}, undefined);
   assert(req.model === "my-claude", "falls back to requestBody.model");
 }
 
@@ -1453,8 +1631,9 @@ function testAnthropicFunctionCallDefaultArguments() {
       model: "claude-sonnet-4-20250514",
       input: [{ type: "function_call", call_id: "call_x", name: "do_thing" }],
     },
-    { model: "claude-sonnet-4-20250514" },
+    { models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 },
   );
   const asst = req.messages.find(function (m) {
     return m.role === "assistant";
@@ -1471,8 +1650,9 @@ function testOpenAIChatEmptyToolOutput() {
       model: "gpt-4o",
       input: [{ type: "function_call_output", call_id: "call_x", output: "" }],
     },
-    { model: "gpt-4o" },
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
   );
   assert(payload.messages[0].content === "", "empty output preserved as empty string");
 }
@@ -1489,8 +1669,9 @@ function testOpenAIChatOutputTextPart() {
         },
       ],
     },
-    { model: "gpt-4o" },
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
   );
   assert(payload.messages[0].role === "assistant", "assistant role");
   assert(payload.messages[0].content === "I think therefore I am", "output_text flattened to string");
@@ -1619,8 +1800,18 @@ async function main() {
   testGetHooks();
   testGetHooksNull();
 
-  // 9. Edge Cases
-  console.log("\n--- 9. Edge Cases ---");
+  // 9. Config
+  console.log("\n--- 9. Config ---");
+  testMigrateProviderWithModel();
+  testMigrateProviderAlreadyMigrated();
+  testMigrateProviderNoModel();
+  testGetProviderByModelMatch();
+  testGetProviderByModelFallback();
+  testGetProviderByModelLegacyNoKey();
+  testGetProviderByModelEmpty();
+
+  // 10. Edge Cases
+  console.log("\n--- 10. Edge Cases ---");
   testOpenAIChatEmptyContentParts();
   testOpenAIChatUndefinedContent();
   testOpenAIChatEmptyToolsArray();

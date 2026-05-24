@@ -457,10 +457,10 @@ function testStreamBacktickThenRealTag() {
 function testStreamUnclosedBacktickWithRealTag() {
   console.log("\n[Test] stream: unclosed backtick does not suppress real tag after");
   var parser = new ThinkingTagStreamParser();
-  var r1 = parser.feed("text `open");
+  parser.feed("text `open");
   var r2 = parser.feed(" <thinking>real reasoning</thinking> end");
   assert(r2.reasoning === "real reasoning", "real tag content extracted despite unclosed backtick before");
-  var flush = parser.flush();
+  parser.flush();
 }
 
 // ===========================================================================

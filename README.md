@@ -1,4 +1,4 @@
-<div align="center">
+﻿<div align="center">
 
 <img src="assets/banner.png" alt="Codex-Bridge" width="600">
 
@@ -6,112 +6,136 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/LeenixP/Codex-Bridge)](https://github.com/LeenixP/Codex-Bridge/releases)
 
-Codex Desktop / CLI 的本地协议桥接工具 —— 将 OpenAI Chat 和 Anthropic API 转换为 OpenAI Responses 格式。
+Codex Desktop / CLI 的本地协议桥接代理 —— 将 OpenAI Chat 和 Anthropic API 转换为 OpenAI Responses 格式，让 Codex 可以使用任意兼容模型。
 
 </div>
 
-## 说明
-
-Codex-Bridge 在本地 `127.0.0.1` 运行代理服务，接收来自 Codex 的 Responses API 请求，将其转换为 OpenAI Chat Completions 或 Anthropic Messages 格式发送到上游，再将响应转换回 Responses API SSE 事件流。
+## 工作原理
 
 ```
-Codex Desktop  →  cc-switch  →  Codex-Bridge  →  上游 API
-                (配置管理)     (协议桥接)       (Chat / Anthropic)
+Codex Desktop  →  cc-switch  →  Codex-Bridge (localhost:8629)  →  上游 API
+                  (配置管理)     (协议桥接 + key/model 路由)      (Chat / Anthropic)
 ```
+
+Codex-Bridge 在本地监听 Responses API 请求，按 `key/modelId` 路由到对应供应商，将请求转换为上游协议（OpenAI Chat 或 Anthropic），再将响应转回 Responses SSE 事件流。
+
+> **纯代理**：不修改 `~/.codex/` 下的任何文件，所有 Codex 配置由 [cc-switch](https://github.com/RadiaxJ/cc-switch) 管理。
+
+## 快速开始
+
+### 安装
+
+从 [Releases](https://github.com/LeenixP/Codex-Bridge/releases) 下载安装包。
+
+### 三步配置
+
+#### 1. 添加供应商
+
+打开 Codex-Bridge → 供应商页面 → 添加供应商：
+
+| 字段 | 说明 | 示例 |
+|------|------|------|
+| 协议 | 上游 API 格式 | OpenAI Chat / Anthropic |
+| Base URL | 上游 API 地址 | `https://open.bigmodel.cn/api/paas/v4` |
+| API Key | 上游密钥 | `your-api-key` |
+| 模型 | 可添加多个 | `glm-5.1`（max output 64K） |
+
+保存后系统自动生成 **路由 ID**（如供应商名"智谱" → `GLM`）。
+
+#### 2. 启动代理
+
+点击侧边栏「启动代理」，代理默认监听 `http://localhost:8629/v1`。
+
+> **局域网访问**：在「设置」页面开启「局域网访问」后，局域网设备可通过本机 IP（如 `http://192.168.1.100:8629/v1`）访问代理，本机 localhost 仍可正常使用。
+
+#### 3. 连接 Codex
+
+两种方式任选其一：
+
+**方式 A：配合 cc-switch 使用**（适合第三方 API，API Key 登录）
+
+在 cc-switch 中添加自定义 Provider：
+
+```toml
+wire_api = "responses"
+base_url = "http://localhost:8629/v1"
+model = "GLM/glm-5.1"        # 格式：路由ID/模型名
+```
+
+**方式 B：直接编辑 config.toml**（适合 ChatGPT 账号登录，完整功能）
+
+编辑 `~/.codex/config.toml`：
+
+```toml
+model_provider = "codex-bridge"
+model = "GLM/glm-5.1"
+model_reasoning_effort = "high"
+disable_response_storage = true
+preferred_auth_method = "chatgpt"
+
+[model_providers.codex-bridge]
+name = "codex-bridge"
+wire_api = "responses"
+requires_openai_auth = true
+base_url = "http://localhost:8629/v1"
+
+[windows]
+sandbox = "elevated"
+```
+
+### 多供应商路由
+
+添加多个供应商时，每个供应商有独立的路由 ID，cc-switch 通过模型名路由：
+
+```
+GLM/glm-5.1        →  智谱 (OpenAI Chat 协议)
+deepseek/deepseek-v4-pro  →  DeepSeek (OpenAI Chat 协议)
+anth/claude-sonnet-4-20250514  →  Anthropic (Anthropic 协议)
+```
+
+同一个供应商下可配置多个模型，共享 Base URL 和 API Key。
 
 ## 功能
 
-- **多协议支持** — OpenAI Chat Completions 与 Anthropic Messages API
-- **厂商预设** — DeepSeek 等厂商内置专属优化（reasoning 回传、双端点切换）；新增厂商只需添加数据条目
-- **流式传输** — 完整 SSE 流式响应，实时文本、推理和工具调用事件
-- **思考 / 推理** — Anthropic extended thinking 映射为 Codex reasoning 面板展示
-- **工具调用** — 双向工具调用转换（`function_call` ↔ `tool_use`）
-- **多模态支持** — 图片输入透传至 OpenAI 和 Anthropic
-- **Provider 管理** — 添加、编辑、删除、切换多个 API 供应商
-- **事件追踪** — 实时请求日志，包含模型、协议、成功/失败状态
-- **系统托盘** — 后台运行，右键菜单快速切换供应商
-- **cc-switch 集成** — 作为 cc-switch 下游，模型路由 + 协议桥接，cc-switch 管理所有 Codex 配置
-- **跨平台** — Windows、macOS、Linux（x64 + arm64）
-
-## 安装
-
-从 [Releases](https://github.com/LeenixP/Codex-Bridge/releases) 下载对应平台的最新版本。
-
-| 平台 | 格式 |
-|------|------|
-| Windows x64 | Setup exe |
-| Linux x64 / arm64 | AppImage、deb |
-| macOS (universal) | dmg、tar.gz、zip |
-
-## 使用
-
-1. 启动 Codex-Bridge
-2. 添加 Provider（选择预设或自定义、填写 API Key 和模型名）
-3. 侧边栏点击「启动代理」
-4. 在 cc-switch 中配置 Base URL 为 `http://127.0.0.1:8629/v1`，模型名与 Provider 中的模型名一致
-
-> Codex-Bridge 是纯 API 代理，不修改 `~/.codex/` 下的任何配置文件。配置管理由 cc-switch 负责。
+- **双协议适配** — OpenAI Chat Completions ↔ Anthropic Messages，均转为 Responses 格式
+- **key/modelId 路由** — 按供应商路由 ID + 模型名精确路由，无冲突
+- **厂商预设** — DeepSeek（reasoning 回传、双端点切换）、Kimi（Anthropic 协议）等内置优化
+- **流式传输** — 完整 SSE 流，支持实时文本、推理过程、工具调用
+- **思考过程透传** — `reasoning_content` 字段 + `<thinking>` 内联标签均映射为 Codex reasoning 面板
+- **工具调用** — 双向转换 `function_call` ↔ `tool_use`
+- **多模态** — 图片输入透传
+- **请求追踪** — 实时日志 + `~/.codex-bridge/trace/` 完整请求/响应记录
+- **局域网访问** — 开启后局域网设备可通过本机 IP 访问代理
+- **系统托盘** — 后台运行，托盘菜单快速操作
 
 ## 开发
 
 ```bash
-# 安装依赖
-npm install
-
-# 启动应用
-npm start
-
-# 语法检查 / 测试 / Lint
-npm run check
-npm test
-npm run lint
-
-# 格式化代码
-npm run format
-
-# 生成图标
-npm run icons
-
-# 构建当前平台
-npm run dist
-```
-
-## 项目结构
-
-```
-src/
-├── electron/       # 桌面外壳（窗口、托盘、IPC）
-├── proxy/          # HTTP 代理服务器
-│   ├── core/       # 编排器、SSE 桥接、事件模型
-│   ├── adapters/   # 协议适配器（openai-chat、anthropic）
-│   └── presets/    # 厂商预设注册表（DeepSeek 等厂商专属优化）
-├── ui/             # 管理面板（HTML/CSS/JS）
-│   └── assets/     # 图标资源
-└── shared/         # 配置、日志、工具函数
+npm install       # 安装依赖
+npm start         # 启动应用
+npm test          # 运行测试（540+ 用例）
+npm run lint      # ESLint 检查
+npm run format    # Prettier 格式化
+npm run dist:win  # 构建 Windows 安装包
 ```
 
 ## 故障排除
 
 | 问题 | 解决方案 |
 |------|---------|
-| 代理无法启动 | 检查端口 8629 是否被占用 |
-| Codex 未通过代理路由 | 检查 cc-switch 中 Base URL 是否指向 `http://127.0.0.1:8629/v1` |
-| 连接测试失败 | 验证 API Key 和 Base URL，确认上游服务可达 |
-| 模型不匹配 | 确保 cc-switch 中的模型名与 Codex-Bridge Provider 中的模型名一致 |
-
-## 贡献
-
-欢迎贡献！详见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+| 代理无法启动 | 检查 8629 端口是否被占用 |
+| Codex 连不上代理 | 确认 cc-switch 中 `base_url` 为 `http://localhost:8629/v1` |
+| 局域网设备连不上 | 确认已开启「局域网访问」，检查防火墙是否放行 8629 端口 |
+| 模型不匹配 | 使用 `路由ID/模型名` 格式，如 `GLM/glm-5.1` |
+| 响应被截断 | 检查供应商配置中的 max output tokens 是否足够 |
+| 连接测试失败 | 验证 API Key 和 Base URL，确认上游可达 |
+| 查看详细日志 | 查看 `~/.codex-bridge/trace/` 下的请求记录 |
 
 ## 致谢
 
-本项目参考了以下优秀项目：
-
 - [CodeSeeX](https://github.com/tastesteak/codeseex) — Codex 协议桥接与模型管理
-- [cc-switch](https://github.com/RadiaxJ/cc-switch) — Tauri 实现的 Codex 代理切换工具
-
-特别感谢 [@tastesteak](https://github.com/tastesteak) 和 [@RadiaxJ](https://github.com/RadiaxJ) 在协议适配和配置文件注入方面的开创性工作。
+- [cc-switch](https://github.com/RadiaxJ/cc-switch) — Tauri 实现的 Codex 配置管理工具
 
 ## 许可证
 
-MIT
+[MIT](LICENSE)

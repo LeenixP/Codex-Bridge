@@ -7,9 +7,9 @@ const { getHooks } = require("../presets");
 const { createTraceSession } = require("../../shared/trace");
 const log = require("../../shared/logger");
 
-async function orchestrate(req, res, requestBody, provider, settings) {
+async function orchestrate(req, res, requestBody, provider, modelConfig, settings) {
   const responseId = makeId("resp");
-  const model = provider.model || requestBody.model || "unknown";
+  const model = (modelConfig && modelConfig.id) || provider.model || requestBody.model || "unknown";
   const stream = requestBody.stream !== false;
 
   log.info("Request → " + provider.name + " | model=" + model + " | stream=" + stream, { provider: provider.name, requestId: responseId });
@@ -41,7 +41,7 @@ async function orchestrate(req, res, requestBody, provider, settings) {
     { provider: provider.name, requestId: responseId },
   );
 
-  const upstreamRequest = adapter.buildUpstreamRequest(requestBody, provider, settings);
+  const upstreamRequest = adapter.buildUpstreamRequest(requestBody, provider, settings, modelConfig);
 
   log.debug(
     "Upstream messages: " +

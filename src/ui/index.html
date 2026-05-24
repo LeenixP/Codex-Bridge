@@ -75,7 +75,7 @@
         <div class="page-header">
           <div>
             <h1 data-i18n="quickstartTitle">快速开始</h1>
-            <p class="page-subtitle" data-i18n="quickstartSubtitle">Codex-Bridge 作为纯 API 代理运行，配合 cc-switch 或其他工具使用。</p>
+            <p class="page-subtitle" data-i18n="quickstartSubtitle">Codex-Bridge 作为纯 API 代理运行，支持两种使用方式。</p>
           </div>
         </div>
 
@@ -83,6 +83,7 @@
           <div class="panel-header"><h2 data-i18n="quickstartApiEndpoint">API 地址</h2></div>
           <div class="panel-body">
             <code id="quickstart-endpoint" style="font-size:14px;display:block;padding:8px 12px;background:var(--ctrl-bg);border-radius:6px;word-break:break-all">http://127.0.0.1:8629/v1</code>
+            <small id="quickstart-lan-hint" style="display:none;font-size:12px;color:var(--text-muted);margin-top:6px;line-height:1.5" data-i18n="qsLanHint">局域网设备请使用上方地址访问。本机仍可使用 127.0.0.1。</small>
           </div>
         </div>
 
@@ -92,7 +93,38 @@
             <div id="quickstart-models" style="font-size:13px;color:var(--text-secondary)">
               <p data-i18n="noProviders">尚未配置供应商。</p>
             </div>
-            <small data-i18n="quickstartModelsHint" style="display:block;margin-top:8px;font-size:12px;color:var(--text-muted)">cc-switch 中填写的模型名需与此处一致</small>
+            <small data-i18n="quickstartModelsHint" style="display:block;margin-top:8px;font-size:12px;color:var(--text-muted)">模型名格式为「路由 ID/模型名」，如 GLM/glm-5.1</small>
+          </div>
+        </div>
+
+        <div class="panel" style="border-color:var(--accent-primary, #3b82f6)">
+          <div class="panel-header"><h2 data-i18n="qsModeATitle">方式一：配合 cc-switch 使用</h2></div>
+          <div class="panel-body">
+            <p data-i18n="qsModeADesc" style="font-size:13px;line-height:1.6;margin-bottom:12px">使用 cc-switch 管理 Codex 配置，通过 API Key 登录，适合使用第三方 API（Kimi、DeepSeek、智谱等）。</p>
+            <div style="font-size:12px;line-height:1.8">
+              <strong data-i18n="qsModeAStep1">1. 在「供应商」页面添加上游 API</strong><br>
+              <strong data-i18n="qsModeAStep2">2. 点击侧边栏「启动代理」</strong><br>
+              <strong data-i18n="qsModeAStep3">3. 在 cc-switch 中添加自定义 Provider：</strong>
+              <pre id="qs-ccswitch-config" style="font-size:12px;padding:10px;background:var(--ctrl-bg);border-radius:6px;overflow-x:auto;white-space:pre-wrap;margin-top:6px">wire_api = "responses"
+base_url = "http://127.0.0.1:8629/v1"
+model = "MODEL_NAME"</pre>
+            </div>
+            <button class="btn btn-secondary" id="btn-copy-ccswitch" style="margin-top:8px"><span data-i18n="quickstartCopyCmd">复制</span></button>
+          </div>
+        </div>
+
+        <div class="panel" style="border-color:var(--accent-success, #10b981)">
+          <div class="panel-header"><h2 data-i18n="qsModeBTitle">方式二：直接配置 config.toml</h2></div>
+          <div class="panel-body">
+            <p data-i18n="qsModeBDesc" style="font-size:13px;line-height:1.6;margin-bottom:12px">使用 ChatGPT 账号登录 Codex，手动编辑 config.toml，可使用完整的 Codex 功能（沙箱执行等）。</p>
+            <div style="font-size:12px;line-height:1.8">
+              <strong data-i18n="qsModeBStep1">1. 在「供应商」页面添加上游 API</strong><br>
+              <strong data-i18n="qsModeBStep2">2. 点击侧边栏「启动代理」</strong><br>
+              <strong data-i18n="qsModeBStep3">3. 编辑 Codex 配置文件 config.toml：</strong>
+              <pre id="qs-toml-config" style="font-size:12px;padding:10px;background:var(--ctrl-bg);border-radius:6px;overflow-x:auto;white-space:pre-wrap;margin-top:6px"></pre>
+            </div>
+            <p style="font-size:11px;color:var(--text-muted);margin-top:8px" data-i18n="qsModeBNote">配置文件路径：~/.codex/config.toml</p>
+            <button class="btn btn-secondary" id="btn-copy-toml" style="margin-top:4px"><span data-i18n="quickstartCopyCmd">复制</span></button>
           </div>
         </div>
 
@@ -101,17 +133,6 @@
           <div class="panel-body">
             <pre id="quickstart-curl" style="font-size:12px;padding:10px;background:var(--ctrl-bg);border-radius:6px;overflow-x:auto;white-space:pre-wrap">Invoke-RestMethod -Uri "http://127.0.0.1:8629/v1/models"</pre>
             <button class="btn btn-secondary" id="btn-copy-curl" style="margin-top:8px"><span data-i18n="quickstartCopyCmd">复制</span></button>
-          </div>
-        </div>
-
-        <div class="panel" style="border-color:var(--accent-warning, #f59e0b)">
-          <div class="panel-header"><h2 data-i18n="quickstartStep3Title">3. 在 cc-switch 中配置</h2></div>
-          <div class="panel-body">
-            <p data-i18n="quickstartStep3Desc" style="font-size:13px;line-height:1.6">在 cc-switch 中添加自定义 Provider，Base URL 填写上方地址，模型名填写 Codex-Bridge 中供应商的模型名。</p>
-            <p style="font-size:12px;color:var(--text-muted);margin-top:8px">
-              <strong>cc-switch Provider 配置示例：</strong><br>
-              <code style="display:block;margin-top:4px;padding:8px;background:var(--ctrl-bg);border-radius:6px;font-size:12px">wire_api = "responses"<br>base_url = "http://127.0.0.1:8629/v1"<br>model = "&lt;Codex-Bridge 中的模型名&gt;"</code>
-            </p>
           </div>
         </div>
       </section>
@@ -154,6 +175,17 @@
               <label for="setting-port" data-i18n="listenPort">监听端口</label>
               <small data-i18n="listenPortHint" style="display:block;font-size:12px;color:var(--text-muted);margin-top:2px">修改后需重启代理。</small>
               <input type="number" id="setting-port" class="inline-control" value="8629" min="1024" max="65535" step="1" style="width: 120px;">
+            </div>
+            <div class="setting-item" style="margin-top:12px">
+              <div>
+                <label data-i18n="lanAccess">局域网访问</label>
+                <span class="help-tip" data-tip-key="lanAccessHint">?</span>
+                <small data-i18n="lanAccessDesc" style="display:block;font-size:12px;color:var(--text-muted);margin-top:2px">开启后局域网设备可通过本机 IP 访问代理。修改后需重启代理。</small>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="setting-lan">
+                <span class="slider"></span>
+              </label>
             </div>
           </div>
         </div>

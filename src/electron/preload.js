@@ -3,6 +3,7 @@
 const { contextBridge, ipcRenderer } = require("electron");
 const path = require("node:path");
 const os = require("node:os");
+const { generateKey, getExistingKeys } = require("../shared/config");
 
 const DATA_DIR = path.join(os.homedir(), ".codex-bridge");
 
@@ -22,6 +23,8 @@ contextBridge.exposeInMainWorld("codexBridge", {
   checkForUpdates: () => ipcRenderer.invoke("check-for-updates"),
   getPresets: () => ipcRenderer.invoke("get-presets"),
   getVariantBaseUrl: (provider, protocol) => ipcRenderer.invoke("get-variant-baseurl", provider, protocol),
+  generateKey: generateKey,
+  getExistingKeys: getExistingKeys,
   onProxyStatusChange: (callback) => {
     ipcRenderer.on("proxy-status-changed", (_, status) => callback(status));
   },

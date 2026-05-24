@@ -1,17 +1,33 @@
-# Changelog
+﻿# Changelog
 
 All notable changes to Codex-Bridge will be documented in this file.
 
-## [1.2.0] — 2026-05-23
+## [1.2.0] — 2026-05-24
 
 ### Added
+- **key/modelId routing** — Provider-level `key` field (auto-generated from name with ZH→EN mapping) enables `key/modelId` format routing (e.g. `GLM/glm-5.1`), eliminating model name conflicts across providers.
+- **Multi-model per provider** — Each provider supports a `models[]` array with per-model `maxOutputK` and `maxContextK` settings, replacing the single `model` field.
+- **Quickstart dual-mode** — Quick Start page now shows two usage modes: Mode A (cc-switch + API Key) and Mode B (direct config.toml + ChatGPT account), with auto-generated config templates.
+- **Clickable model selector** — Available models on Quick Start page are selectable tags; selecting a model auto-updates all config templates and test commands.
 - **Trace Mode** — Settings toggle that records every request's raw upstream SSE stream and proxy output to disk (`trace/YYYY-MM-DD/HHmmss_model_{req,raw,out}.*`), enabling pixel-level protocol comparison and debugging without external tools.
-- **Inline thinking-tag parser** — Streaming state machine in both adapters detects `<thinking>`, `<think>`, `<thought>`, `<reasoning>` tags inside text content (used by GLM and similar Chinese LLMs) and routes tagged content to proper reasoning events instead of leaking it to the display.
+- **Inline thinking-tag parser** — Streaming state machine in both adapters detects `<thinking>`, `<<H>>`, `<thought>`, `<reasoning>` tags inside text content (used by GLM and similar Chinese LLMs) and routes tagged content to proper reasoning events instead of leaking it to the display.
+- **Markdown-aware tag parser** — Thinking-tag parser tracks backtick code spans/blocks to avoid false positives on literal `<thinking>` text inside markdown.
 - **Legacy `function_call` fallback** — Both adapters now support the older single `function_call` delta format used by some Chinese LLMs, in addition to the standard `tool_calls` array.
 - **DeepSeek `user_id` passthrough** — Provider-level `userId` field passes through as `user_id` (OpenAI Chat) or `metadata.user_id` (Anthropic) for account-level KVCache and safety isolation.
+- **LAN access toggle** — Settings page toggle switch to enable LAN access (binds `0.0.0.0` instead of `127.0.0.1`); Quick Start page shows hint about using machine IP for LAN devices.
 
 ### Changed
-- Tool call start events are now deduplicated via a `started` flag to prevent redundant SSE emissions.
+- **Removed `active` provider concept** — Routing is now purely request-based (`key/modelId`); no more "set as current" button or active badge.
+- **Provider data migration** — `loadProviders()` auto-migrates old `{ model: "xxx" }` format to `{ models: [{ id: "xxx" }] }` and generates `key` for providers without one.
+- **Thinking parser conditional skip** — OpenAI Chat adapter skips the thinking-tag parser when upstream sends `reasoning_content` field, preventing false-positive truncation on providers like GLM-5.1.
+- **Anthropic adapter** — `max_tokens` defaults to 65536 (from 8192) to prevent long response truncation; removed `ThinkingTagStreamParser` from `text_delta` processing.
+- **Tool call start events** — Now deduplicated via a `started` flag to prevent redundant SSE emissions.
+- **`/v1/models` endpoint** — Returns models in `key/modelId` format.
+- **Tray menu** — Providers shown as `Name (key)` without radio button selection.
+
+### Fixed
+- **Response truncation on OpenAI Chat** — Thinking-tag parser no longer misidentifies literal `<thinking>` text in markdown content as thinking tags (Layer A: skip when `reasoning_content` present; Layer B: backtick-aware parsing).
+- **Error path test model IDs** — Fixed `test/error-paths.js` using `key/modelId` in provider model config instead of plain model ID.
 
 ## [0.1.1] — 2026-05-23
 

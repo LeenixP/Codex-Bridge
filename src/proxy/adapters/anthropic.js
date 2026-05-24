@@ -5,7 +5,7 @@ const log = require("../../shared/logger");
 const { parseSSEStream } = require("../../shared/stream");
 const reasoningCache = require("../core/reasoning-cache");
 const { stripCodexFields } = require("../../shared/request-cleaner");
-const { ThinkingTagStreamParser, extractThinkingTags } = require("../../shared/thinking-parser");
+const { extractThinkingTags } = require("../../shared/thinking-parser");
 const { getHooks } = require("../presets");
 const {
   reasoningDeltaEvent,
@@ -49,13 +49,14 @@ const EFFORT_TO_BUDGET = {
  * @param {string} provider.model - Default model override
  * @returns {object} Anthropic Messages request payload
  */
-function buildUpstreamRequest(requestBody, provider, _settings) {
+function buildUpstreamRequest(requestBody, provider, _settings, modelConfig) {
   const { messages, systemParts } = convertInputToMessages(requestBody, provider);
+  const maxTokens = requestBody.max_output_tokens || (modelConfig && modelConfig.maxOutputK ? modelConfig.maxOutputK * 1024 : 65536);
   const payload = {
-    model: provider.model || requestBody.model,
+    model: (modelConfig && modelConfig.id) || provider.model || requestBody.model,
     messages,
     stream: requestBody.stream !== false,
-    max_tokens: requestBody.max_output_tokens || 8192,
+    max_tokens: maxTokens,
     _betas: [],
   };
 
@@ -597,7 +598,6 @@ async function streamUpstream(upstreamPayload, provider, emit, traceSession) {
   let streamEndedCleanly = false;
   let thinkingText = "";
   let thinkingSignature = "";
-  const thinkParser = new ThinkingTagStreamParser();
 
   for await (const chunk of parseSSEStream(res.body)) {
     if (traceSession) traceSession.logRawLine(chunk);
@@ -660,9 +660,7 @@ async function streamUpstream(upstreamPayload, provider, emit, traceSession) {
           emit(reasoningDeltaEvent(delta.thinking));
         }
       } else if (delta.type === "text_delta") {
-        const parsed = thinkParser.feed(delta.text || "");
-        if (parsed.reasoning) emit(reasoningDeltaEvent(parsed.reasoning));
-        if (parsed.text) emit(textDeltaEvent(parsed.text));
+        emit(textDeltaEvent(delta.text || ""));
       } else if (delta.type === "input_json_delta") {
         const tc = toolCalls[currentBlockIndex];
         if (tc) {
@@ -694,16 +692,9 @@ async function streamUpstream(upstreamPayload, provider, emit, traceSession) {
   }
 
   if (!streamEndedCleanly) {
-    const flushed = thinkParser.flush();
-    if (flushed.reasoning) emit(reasoningDeltaEvent(flushed.reasoning));
-    if (flushed.text) emit(textDeltaEvent(flushed.text));
     emit(errorEvent("Upstream stream ended unexpectedly", "stream_interrupted"));
     return;
   }
-
-  const flushed = thinkParser.flush();
-  if (flushed.reasoning) emit(reasoningDeltaEvent(flushed.reasoning));
-  if (flushed.text) emit(textDeltaEvent(flushed.text));
 
   if (stopReason === "max_tokens") {
     emit(responseIncompleteEvent(stopReason));

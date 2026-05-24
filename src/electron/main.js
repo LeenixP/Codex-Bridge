@@ -311,7 +311,6 @@ function trayLabel(key) {
     port: isZh ? "端口" : "Port",
     providers: isZh ? "供应商" : "Providers",
     quit: isZh ? "退出" : "Quit",
-    active: isZh ? " (当前)" : " (active)",
   };
   return map[key] || key;
 }
@@ -319,16 +318,9 @@ function trayLabel(key) {
 function updateTrayMenu() {
   const proxyRunning = getStatus() === "running";
   const providerItems = providers.map((p, i) => ({
-    label: p.name + (p.active ? trayLabel("active") : ""),
-    type: "radio",
-    checked: Boolean(p.active),
-    click: () => {
-      providers.forEach((pr, idx) => {
-        pr.active = idx === i;
-      });
-      saveProviders(providers);
-      updateTrayMenu();
-    },
+    label: p.name + " (" + (p.key || "?") + ")",
+    type: "normal",
+    click: () => showMainWindow(),
   }));
 
   const template = [

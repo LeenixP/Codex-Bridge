@@ -71,42 +71,42 @@ class ThinkingTagStreamParser {
   }
 
   _tryOpenCode() {
-    var idx = this._buf.indexOf('`');
+    var idx = this._buf.indexOf("`");
     if (idx < 0) return null;
     var run = 0;
-    for (var i = idx; i < this._buf.length && this._buf[i] === '`'; i++) {
+    for (var i = idx; i < this._buf.length && this._buf[i] === "`"; i++) {
       run++;
     }
     if (run >= 3) {
-      var out = this._buf.slice(0, idx + run);
+      var out3 = this._buf.slice(0, idx + run);
       this._buf = this._buf.slice(idx + run);
       this._inCodeBlock = true;
-      return out;
+      return out3;
     }
-    var out = this._buf.slice(0, idx + 1);
+    var out1 = this._buf.slice(0, idx + 1);
     this._buf = this._buf.slice(idx + 1);
     this._inCodeSpan = true;
-    return out;
+    return out1;
   }
 
   _tryCloseCode() {
-    var idx = this._buf.indexOf('`');
+    var idx = this._buf.indexOf("`");
     if (idx < 0) return null;
     if (this._inCodeBlock) {
       var run = 0;
-      for (var i = idx; i < this._buf.length && this._buf[i] === '`'; i++) {
+      for (var ci = idx; ci < this._buf.length && this._buf[ci] === "`"; ci++) {
         run++;
       }
       if (run < 3) return null;
-      var out = this._buf.slice(0, idx + run);
+      var outCb = this._buf.slice(0, idx + run);
       this._buf = this._buf.slice(idx + run);
       this._inCodeBlock = false;
-      return out;
+      return outCb;
     }
-    var out = this._buf.slice(0, idx + 1);
+    var outCs = this._buf.slice(0, idx + 1);
     this._buf = this._buf.slice(idx + 1);
     this._inCodeSpan = false;
-    return out;
+    return outCs;
   }
 
   feed(chunk) {
@@ -134,7 +134,7 @@ class ThinkingTagStreamParser {
         this._tagName = "";
       } else if (this._inCodeSpan || this._inCodeBlock) {
         if (this._inCodeSpan) {
-          var nl = this._buf.indexOf('\n');
+          var nl = this._buf.indexOf("\n");
           if (nl >= 0) {
             text += this._buf.slice(0, nl);
             this._buf = this._buf.slice(nl);

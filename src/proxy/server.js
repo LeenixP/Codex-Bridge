@@ -137,14 +137,18 @@ async function handleResponses(req, res, settings, providers) {
     return;
   }
 
-  const provider = getProviderByModel(providers, requestBody.model);
-  if (!provider) {
-    sendJson(res, 503, { error: { message: "No provider configured for model: " + (requestBody.model || "?"), type: "server_error", code: "no_provider" } });
+  const result = getProviderByModel(providers, requestBody.model);
+  if (!result) {
+    sendJson(res, 503, {
+      error: { message: "No provider configured for model: " + (requestBody.model || "?"), type: "server_error", code: "no_provider" },
+    });
     return;
   }
 
-  log.info("→ POST /v1/responses stream=" + (requestBody.stream !== false) + " model=" + (requestBody.model || "?") + " → " + provider.name);
-  await orchestrate(req, res, requestBody, provider, settings);
+  log.info(
+    "→ POST /v1/responses stream=" + (requestBody.stream !== false) + " model=" + (requestBody.model || "?") + " → " + result.provider.name,
+  );
+  await orchestrate(req, res, requestBody, result.provider, result.modelConfig, settings);
 }
 
 async function handleResponsesCompact(req, res, settings, providers) {
@@ -159,13 +163,15 @@ async function handleResponsesCompact(req, res, settings, providers) {
     return;
   }
 
-  const provider = getProviderByModel(providers, requestBody.model);
-  if (!provider) {
-    sendJson(res, 503, { error: { message: "No provider configured for model: " + (requestBody.model || "?"), type: "server_error", code: "no_provider" } });
+  const result2 = getProviderByModel(providers, requestBody.model);
+  if (!result2) {
+    sendJson(res, 503, {
+      error: { message: "No provider configured for model: " + (requestBody.model || "?"), type: "server_error", code: "no_provider" },
+    });
     return;
   }
 
-  await orchestrate(req, res, requestBody, provider, settings);
+  await orchestrate(req, res, requestBody, result2.provider, result2.modelConfig, settings);
 }
 
 async function handleInputTokens(req, res) {
@@ -240,8 +246,13 @@ function handleGetInputItems(req, res, responseId) {
 }
 
 function handleModels(req, res, providers) {
-  const models = (providers || []).filter((p) => p.model).map((p) => p.model);
-  if (models.length === 0) models.push("gpt-4o");
+  const models = [];
+  (providers || []).forEach(function (p) {
+    (p.models || []).forEach(function (m) {
+      if (m.id && p.key) models.push(p.key + "/" + m.id);
+    });
+  });
+  if (models.length === 0) models.push("provider/gpt-4o");
   sendJson(res, 200, {
     object: "list",
     data: models.map((id) => ({ id, object: "model", created: 0, owned_by: "codex-bridge" })),

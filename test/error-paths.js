@@ -131,7 +131,7 @@ async function testSyncUpstream400() {
   console.log("\n[Test] Sync upstream 400 proxies status code");
   await stopMockAndCreate("status", { statusCode: 400, message: "Bad request from upstream" });
 
-  const body = JSON.stringify({ model: "gpt-4o", input: "hi", stream: false });
+  const body = JSON.stringify({ model: "test/gpt-4o", input: "hi", stream: false });
   const res = await httpRequest(
     {
       hostname: "127.0.0.1",
@@ -152,7 +152,7 @@ async function testSyncUpstream500() {
   console.log("\n[Test] Sync upstream 500 proxies status code");
   await stopMockAndCreate("status", { statusCode: 500, message: "Internal server error" });
 
-  const body = JSON.stringify({ model: "gpt-4o", input: "hi", stream: false });
+  const body = JSON.stringify({ model: "test/gpt-4o", input: "hi", stream: false });
   const res = await httpRequest(
     {
       hostname: "127.0.0.1",
@@ -170,7 +170,7 @@ async function testSyncUpstream401() {
   console.log("\n[Test] Sync upstream 401 proxies status code");
   await stopMockAndCreate("status", { statusCode: 401, message: "Unauthorized" });
 
-  const body = JSON.stringify({ model: "gpt-4o", input: "hi", stream: false });
+  const body = JSON.stringify({ model: "test/gpt-4o", input: "hi", stream: false });
   const res = await httpRequest(
     {
       hostname: "127.0.0.1",
@@ -188,7 +188,7 @@ async function testStreamInterruption() {
   console.log("\n[Test] Stream interruption emits error");
   await stopMockAndCreate("stream-abort", {});
 
-  const body = JSON.stringify({ model: "gpt-4o", input: "hi", stream: true });
+  const body = JSON.stringify({ model: "test/gpt-4o", input: "hi", stream: true });
   const res = await httpRequest(
     {
       hostname: "127.0.0.1",
@@ -214,7 +214,7 @@ async function testCorruptSseChunks() {
   console.log("\n[Test] Corrupt SSE chunks handled gracefully");
   await stopMockAndCreate("corrupt-sse", {});
 
-  const body = JSON.stringify({ model: "gpt-4o", input: "hi", stream: true });
+  const body = JSON.stringify({ model: "test/gpt-4o", input: "hi", stream: true });
   const res = await httpRequest(
     {
       hostname: "127.0.0.1",
@@ -239,7 +239,7 @@ async function testOpenAIToolCalls() {
   await stopMockAndCreate("stream-tool-calls", {});
 
   const body = JSON.stringify({
-    model: "gpt-4o",
+    model: "test/gpt-4o",
     input: "What's the weather?",
     stream: true,
     tools: [{ type: "function", name: "get_weather", description: "Get weather", parameters: {} }],
@@ -276,18 +276,18 @@ async function testAnthropicSyncError() {
   const providers = [
     {
       name: "Error Anth",
+      key: "anth",
       protocol: "anthropic",
       baseUrl: "http://127.0.0.1:" + MOCK_PORT,
       apiKey: "tk",
-      model: "claude-sonnet-4-20250514",
-      active: true,
+      models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }],
     },
   ];
   await stopProxyServer();
   await createProxyServer({ port: PROXY_PORT, host: "127.0.0.1" }, providers);
   await delay(200);
 
-  const body = JSON.stringify({ model: "claude-sonnet-4-20250514", input: "hi", stream: false });
+  const body = JSON.stringify({ model: "anth/claude-sonnet-4-20250514", input: "hi", stream: false });
   const res = await httpRequest(
     {
       hostname: "127.0.0.1",
@@ -308,18 +308,18 @@ async function testAnthropicStreamInterruption() {
   const providers = [
     {
       name: "StreamErr Anth",
+      key: "anth",
       protocol: "anthropic",
       baseUrl: "http://127.0.0.1:" + MOCK_PORT,
       apiKey: "tk",
-      model: "claude-sonnet-4-20250514",
-      active: true,
+      models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }],
     },
   ];
   await stopProxyServer();
   await createProxyServer({ port: PROXY_PORT, host: "127.0.0.1" }, providers);
   await delay(200);
 
-  const body = JSON.stringify({ model: "claude-sonnet-4-20250514", input: "hi", stream: true });
+  const body = JSON.stringify({ model: "anth/claude-sonnet-4-20250514", input: "hi", stream: true });
   const res = await httpRequest(
     {
       hostname: "127.0.0.1",
@@ -347,11 +347,11 @@ async function stopMockAndCreate(mode, options) {
   const providers = [
     {
       name: "Error Test",
+      key: "test",
       protocol: "openai-chat",
       baseUrl: "http://127.0.0.1:" + MOCK_PORT + "/v1",
       apiKey: "tk",
-      model: "gpt-4o",
-      active: true,
+      models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }],
     },
   ];
   await createProxyServer({ port: PROXY_PORT, host: "127.0.0.1" }, providers);
@@ -361,18 +361,17 @@ async function stopMockAndCreate(mode, options) {
 async function main() {
   console.log("=== Codex-Bridge Error Path Tests ===");
 
-  // Setup with OpenAI Chat provider
   PROXY_PORT = await getAvailablePort();
   await createMockErrorServer("status", { statusCode: 200, message: "ok" });
   console.log("[Setup] Mock error server on port " + MOCK_PORT);
   const providers = [
     {
       name: "Error Test",
+      key: "test",
       protocol: "openai-chat",
       baseUrl: "http://127.0.0.1:" + MOCK_PORT + "/v1",
       apiKey: "tk",
-      model: "gpt-4o",
-      active: true,
+      models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }],
     },
   ];
   await createProxyServer({ port: PROXY_PORT, host: "127.0.0.1" }, providers);

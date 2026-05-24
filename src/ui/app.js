@@ -57,6 +57,10 @@
       if (small) small.textContent = t(key);
     });
 
+    document.querySelectorAll("[data-tip-key]").forEach((el) => {
+      el.setAttribute("data-tooltip", t(el.getAttribute("data-tip-key")));
+    });
+
     // Update proxy status label
     updateProxyStatusLabel();
 
@@ -210,6 +214,8 @@
   // Settings
   function applySettings() {
     document.getElementById("setting-port").value = settings.port || 8629;
+    var lanCheckbox = document.getElementById("setting-lan");
+    if (lanCheckbox) lanCheckbox.checked = settings.host === "0.0.0.0";
 
     setRadio("theme", settings.theme || "dark");
     setRadio("language", settings.language || "zh");
@@ -249,6 +255,8 @@
 
   // Settings change listeners
   document.getElementById("setting-port").addEventListener("change", saveCurrentSettings);
+  var lanCheckbox = document.getElementById("setting-lan");
+  if (lanCheckbox) lanCheckbox.addEventListener("change", saveCurrentSettings);
   document.querySelectorAll('input[name="close"]').forEach((r) => r.addEventListener("change", saveCurrentSettings));
   document.querySelectorAll('input[name="theme"]').forEach((r) =>
     r.addEventListener("change", () => {
@@ -285,6 +293,8 @@
   async function saveCurrentSettings() {
     try {
       settings.port = Number(document.getElementById("setting-port").value) || 8629;
+      var lanEl = document.getElementById("setting-lan");
+      settings.host = lanEl && lanEl.checked ? "0.0.0.0" : "127.0.0.1";
       settings.theme = getRadio("theme");
       settings.language = getRadio("language");
       settings.logLevel = getRadio("loglevel");
@@ -373,19 +383,14 @@
   }
 
   function providerCardHtml(provider, index) {
-    const activeClass = provider.active ? " active" : "";
     const protocolLabel = provider.protocol === "anthropic" ? t("protocolAnthropic") : t("protocolOpenAI");
-    const statusLabel = provider.active ? '<span class="status-badge active">' + t("active") + "</span>" : "";
-    // Only vendor presets with hooks (e.g. deepseek) get the badge — not protocol templates
     const isVendorPreset = provider.preset && provider.preset !== "openai-chat" && provider.preset !== "anthropic";
     const presetLabel = isVendorPreset ? '<span class="preset-tag">' + t("presetTag") + "</span>" : "";
     const userIdLabel = provider.userId
       ? '<span class="userid-badge" title="' + t("labelUserId") + '">uid: ' + escapeHtml(provider.userId) + "</span>"
       : "";
     return (
-      '<div class="provider-card' +
-      activeClass +
-      '" data-index="' +
+      '<div class="provider-card" data-index="' +
       index +
       '">' +
       '<div class="provider-icon">' +
@@ -395,14 +400,17 @@
       '<div class="provider-name">' +
       escapeHtml(provider.name) +
       " " +
-      statusLabel +
-      " " +
       presetLabel +
       "</div>" +
       '<div class="provider-detail"><span class="protocol-badge">' +
       protocolLabel +
       "</span> " +
-      escapeHtml(provider.model || "") +
+      (provider.models || [])
+        .map(function (m) {
+          return escapeHtml((provider.key ? provider.key + "/" : "") + m.id);
+        })
+        .filter(Boolean)
+        .join(", ") +
       " " +
       userIdLabel +
       "</div>" +
@@ -431,13 +439,6 @@
       "</div>" +
       "</div>" +
       '<div class="provider-actions">' +
-      (provider.active
-        ? ""
-        : '<button class="btn-icon btn-activate" title="' +
-          t("activate") +
-          '" aria-label="' +
-          t("activate") +
-          '"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></button>') +
       '<button class="btn-icon btn-test" title="' +
       t("testConn") +
       '" aria-label="' +
@@ -465,21 +466,6 @@
   }
 
   function bindProviderActions() {
-    document.querySelectorAll(".btn-activate").forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        activateProvider(getCardIndex(e.target));
-      });
-    });
-    document.querySelectorAll(".btn-edit").forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        openEditDialog(getCardIndex(e.target));
-      });
-    });
-    document.querySelectorAll(".btn-delete").forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        deleteProvider(getCardIndex(e.target));
-      });
-    });
     document.querySelectorAll(".btn-test").forEach((btn) => {
       btn.addEventListener("click", (e) => {
         testProvider(getCardIndex(e.target));
@@ -489,24 +475,18 @@
       cb.addEventListener("change", async (e) => {
         const idx = getCardIndex(e.target);
         providers[idx].vision = e.target.checked;
-        const isActive = providers[idx].active;
         if (api) {
-          if (isActive) await api.stopProxy().catch(() => {});
           await api.saveProviders(providers);
         }
-        if (isActive) markNeedsRestart();
       });
     });
     document.querySelectorAll(".toggle-imagegen").forEach((cb) => {
       cb.addEventListener("change", async (e) => {
         const idx = getCardIndex(e.target);
         providers[idx].imageGen = e.target.checked;
-        const isActive = providers[idx].active;
         if (api) {
-          if (isActive) await api.stopProxy().catch(() => {});
           await api.saveProviders(providers);
         }
-        if (isActive) markNeedsRestart();
       });
     });
   }
@@ -515,30 +495,13 @@
     return Number(el.closest(".provider-card").dataset.index);
   }
 
-  async function activateProvider(index) {
-    providers.forEach((p, i) => {
-      p.active = i === index;
-    });
-    if (api) {
-      await api.stopProxy().catch(() => {});
-      await api.saveProviders(providers);
-    }
-    markNeedsRestart();
-    renderProviders();
-    renderQuickstart();
-  }
-
   async function deleteProvider(index) {
     const name = providers[index].name;
     if (!confirm(t("confirmDelete", { name }))) return;
-    const wasActive = providers[index].active;
     providers.splice(index, 1);
-    if (providers.length > 0 && !providers.some((p) => p.active)) providers[0].active = true;
     if (api) {
-      if (wasActive) await api.stopProxy().catch(() => {});
       await api.saveProviders(providers);
     }
-    if (wasActive) markNeedsRestart();
     renderProviders();
     renderQuickstart();
   }
@@ -562,7 +525,7 @@
       protocol: "openai-chat",
       baseUrl: "",
       apiKey: "",
-      model: "",
+      models: [{ id: "", maxOutputK: 64, maxContextK: 128 }],
       userId: "",
       vision: true,
       imageGen: true,
@@ -575,14 +538,67 @@
     showDialog({
       title: t("dialogEditTitle"),
       name: p.name,
+      key: p.key || "",
       protocol: p.protocol,
       baseUrl: p.baseUrl,
       apiKey: p.apiKey,
-      model: p.model,
+      models:
+        p.models && p.models.length > 0
+          ? p.models.map(function (m) {
+              return Object.assign({}, m);
+            })
+          : [{ id: "", maxOutputK: 64, maxContextK: 128 }],
       userId: p.userId || "",
       vision: p.vision !== false,
       imageGen: p.imageGen !== false,
       preset: p.preset || "",
+    });
+  }
+
+  function renderModelRows(models) {
+    return models
+      .map(function (m, i) {
+        return (
+          '<div class="model-row" data-mi="' +
+          i +
+          '">' +
+          '<input type="text" class="model-id" value="' +
+          escapeAttr(m.id || "") +
+          '" placeholder="' +
+          t("placeholderModel") +
+          '">' +
+          '<input type="number" class="model-max-out" value="' +
+          (m.maxOutputK || 64) +
+          '" placeholder="' +
+          t("labelMaxOutput") +
+          '" min="1" title="' +
+          t("labelMaxOutput") +
+          '">' +
+          '<input type="number" class="model-max-ctx" value="' +
+          (m.maxContextK || 128) +
+          '" placeholder="' +
+          t("labelMaxContext") +
+          '" min="1" title="' +
+          t("labelMaxContext") +
+          '">' +
+          '<button type="button" class="btn-icon btn-remove-model" title="' +
+          t("btnRemoveModel") +
+          '">&times;</button>' +
+          "</div>"
+        );
+      })
+      .join("");
+  }
+
+  function bindModelRowEvents() {
+    var dialog = document.getElementById("provider-dialog");
+    if (!dialog) return;
+    dialog.querySelectorAll(".btn-remove-model").forEach(function (btn) {
+      btn.onclick = function () {
+        var list = document.getElementById("dlg-models-list");
+        if (list.children.length <= 1) return;
+        btn.closest(".model-row").remove();
+      };
     });
   }
 
@@ -660,6 +676,15 @@
       '" placeholder="' +
       t("placeholderName") +
       '"></div>' +
+      '<div class="form-group"><label for="dlg-key">' +
+      t("labelKey") +
+      ' <small style="color:var(--text-muted);font-weight:400">(' +
+      t("labelKeyHint") +
+      ')</small></label><input type="text" id="dlg-key" value="' +
+      escapeAttr(data.key || "") +
+      '" placeholder="' +
+      t("placeholderKey") +
+      '" class="dlg-key-input"></div>' +
       '<div class="form-group"><label for="dlg-protocol">' +
       t("labelProtocol") +
       protocolHint +
@@ -682,13 +707,13 @@
       '" placeholder="' +
       t("placeholderApiKey") +
       '"></div>' +
-      '<div class="form-group"><label for="dlg-model">' +
+      '<div class="form-group"><label>' +
       t("labelModel") +
-      '</label><input type="text" id="dlg-model" value="' +
-      escapeAttr(data.model) +
-      '" placeholder="' +
-      t("placeholderModel") +
-      '"></div>' +
+      '</label><div id="dlg-models-list">' +
+      renderModelRows(data.models || [{ id: "", maxOutputK: 64, maxContextK: 128 }]) +
+      '</div><button type="button" class="btn-add-model" style="margin-top:6px">' +
+      t("btnAddModel") +
+      "</button></div>" +
       '<div class="form-group"><label for="dlg-userid">' +
       t("labelUserId") +
       ' <small style="color:var(--text-muted);font-weight:400">(' +
@@ -744,8 +769,9 @@
           document.getElementById("dlg-protocol").value = "openai-chat";
           document.getElementById("dlg-protocol").disabled = false;
           document.getElementById("dlg-baseurl").value = "";
-          document.getElementById("dlg-model").value = "";
           document.getElementById("dlg-apikey").value = "";
+          document.getElementById("dlg-models-list").innerHTML = renderModelRows([{ id: "", maxOutputK: 64, maxContextK: 128 }]);
+          bindModelRowEvents();
           var protoLabel = document.querySelector('label[for="dlg-protocol"]');
           if (protoLabel) {
             var existingHint = protoLabel.querySelector(".protocol-fixed-hint");
@@ -757,8 +783,15 @@
           document.getElementById("dlg-name").value = preset.name || "";
           document.getElementById("dlg-protocol").value = preset.protocol || "openai-chat";
           document.getElementById("dlg-baseurl").value = preset.baseUrl || "";
-          document.getElementById("dlg-model").value = (preset.models && preset.models[0]) || "";
           document.getElementById("dlg-apikey").value = "";
+          var presetModels = (preset.models || []).map(function (m) {
+            return typeof m === "string"
+              ? { id: m, maxOutputK: 64, maxContextK: 128 }
+              : Object.assign({ maxOutputK: 64, maxContextK: 128 }, m);
+          });
+          if (presetModels.length === 0) presetModels = [{ id: "", maxOutputK: 64, maxContextK: 128 }];
+          document.getElementById("dlg-models-list").innerHTML = renderModelRows(presetModels);
+          bindModelRowEvents();
           var presetProtos = preset.protocols;
           var singleProto = presetProtos && presetProtos.length === 1;
           var protoSelect = document.getElementById("dlg-protocol");
@@ -796,6 +829,26 @@
       if (customBtn) customBtn.classList.add("active");
     }
 
+    // Auto-generate key from name
+    var keyInput = dialog.querySelector("#dlg-key");
+    var nameInput = dialog.querySelector("#dlg-name");
+    if (keyInput && nameInput && !data.key) {
+      nameInput.addEventListener("input", function () {
+        if (keyInput.dataset.touched) return;
+        if (api) {
+          var existingKeys = api.getExistingKeys(
+            providers.filter(function (_, i) {
+              return i !== editingIndex;
+            }),
+          );
+          keyInput.value = api.generateKey(nameInput.value.trim(), existingKeys);
+        }
+      });
+      keyInput.addEventListener("input", function () {
+        keyInput.dataset.touched = "1";
+      });
+    }
+
     // Auto-switch baseUrl when protocol changes (vendor variant support)
     const protoSelect = dialog.querySelector("#dlg-protocol");
     protoSelect.addEventListener("change", function () {
@@ -810,6 +863,35 @@
 
     dialog.addEventListener("mousedown", dialog._overlayClickHandler);
     document.addEventListener("keydown", handleDialogKeydown);
+
+    bindModelRowEvents();
+
+    dialog.querySelector(".btn-add-model").addEventListener("click", function () {
+      var list = document.getElementById("dlg-models-list");
+      var div = document.createElement("div");
+      div.className = "model-row";
+      div.dataset.mi = list.children.length;
+      div.innerHTML =
+        '<input type="text" class="model-id" value="" placeholder="' +
+        t("placeholderModel") +
+        '">' +
+        '<input type="number" class="model-max-out" value="64" placeholder="' +
+        t("labelMaxOutput") +
+        '" min="1" title="' +
+        t("labelMaxOutput") +
+        '">' +
+        '<input type="number" class="model-max-ctx" value="128" placeholder="' +
+        t("labelMaxContext") +
+        '" min="1" title="' +
+        t("labelMaxContext") +
+        '">' +
+        '<button type="button" class="btn-icon btn-remove-model" title="' +
+        t("btnRemoveModel") +
+        '">&times;</button>';
+      list.appendChild(div);
+      bindModelRowEvents();
+      div.querySelector(".model-id").focus();
+    });
 
     // Show immediately — innerHTML is already parsed, display+layout are synchronous
     var prevFocus = document.activeElement;
@@ -843,10 +925,17 @@
       const protocol = document.getElementById("dlg-protocol").value;
       const baseUrl = document.getElementById("dlg-baseurl").value.trim();
       const apiKey = document.getElementById("dlg-apikey").value.trim();
-      const model = document.getElementById("dlg-model").value.trim();
       const userId = document.getElementById("dlg-userid").value.trim();
       const vision = document.getElementById("dlg-vision").checked;
       const imageGen = document.getElementById("dlg-imagegen").checked;
+
+      var models = [];
+      document.querySelectorAll("#dlg-models-list .model-row").forEach(function (row) {
+        var id = row.querySelector(".model-id").value.trim();
+        var maxOut = parseInt(row.querySelector(".model-max-out").value, 10) || 64;
+        var maxCtx = parseInt(row.querySelector(".model-max-ctx").value, 10) || 128;
+        if (id) models.push({ id: id, maxOutputK: maxOut, maxContextK: maxCtx });
+      });
 
       if (!name) {
         showToast(t("toastNameRequired"), "error");
@@ -860,28 +949,33 @@
         showToast(t("toastKeyRequired"), "error");
         return;
       }
-      if (!model) {
+      if (models.length === 0) {
         showToast(t("toastModelRequired"), "error");
         return;
       }
 
-      const entry = { name, protocol, baseUrl, apiKey, model, vision, imageGen, active: false, preset: selectedPreset || "" };
+      var key = document.getElementById("dlg-key").value.trim();
+      if (!key && api) {
+        var existingKeys = api.getExistingKeys(
+          providers.filter(function (_, i) {
+            return i !== editingIndex;
+          }),
+        );
+        key = api.generateKey(name, existingKeys);
+      }
+      if (!key) key = name.toLowerCase().replace(/[^a-z0-9\-_]/g, "") || "provider";
+
+      const entry = { name, key, protocol, baseUrl, apiKey, models, vision, imageGen, preset: selectedPreset || "" };
       if (userId) entry.userId = userId;
-      let wasActive = false;
       if (editingIndex >= 0) {
-        wasActive = providers[editingIndex].active;
-        entry.active = wasActive;
         providers[editingIndex] = entry;
       } else {
-        if (providers.length === 0) entry.active = true;
         providers.push(entry);
       }
 
       if (api) {
-        if (wasActive) await api.stopProxy().catch(() => {});
         await api.saveProviders(providers);
       }
-      if (wasActive) markNeedsRestart();
       renderProviders();
       renderQuickstart();
     } catch (err) {
@@ -1002,37 +1096,121 @@
   }
 
   // Quick start page
-  function renderQuickstart() {
-    var endpoint = "http://" + (settings.host || "127.0.0.1") + ":" + (settings.port || 8629) + "/v1";
-    var endpointEl = document.getElementById("quickstart-endpoint");
-    if (endpointEl) endpointEl.textContent = endpoint;
+  var _qsSelectedModel = null;
 
-    var modelsEl = document.getElementById("quickstart-models");
-    if (!modelsEl) return;
-    if (!providers || providers.length === 0) {
-      modelsEl.innerHTML = "<p>" + t("noProviders") + "</p>";
-    } else {
-      modelsEl.innerHTML = providers.map(function (p) {
-        return "<span style=\"display:inline-block;padding:4px 10px;margin:3px;background:var(--ctrl-bg);border-radius:4px;font-family:monospace;font-size:13px\">" + escapeHtml(p.model || "?") + "</span>";
-      }).join("");
+  function getDisplayEndpoint(host, port) {
+    return "http://localhost:" + (port || 8629) + "/v1";
+  }
+
+  function updateQuickstartTemplates(model) {
+    _qsSelectedModel = model;
+    var endpoint = getDisplayEndpoint(settings.host, settings.port);
+
+    var tags = document.querySelectorAll(".qs-model-tag");
+    for (var ti = 0; ti < tags.length; ti++) {
+      if (tags[ti].getAttribute("data-model") === model) {
+        tags[ti].classList.add("qs-model-tag-active");
+      } else {
+        tags[ti].classList.remove("qs-model-tag-active");
+      }
+    }
+
+    var ccswitchEl = document.getElementById("qs-ccswitch-config");
+    if (ccswitchEl) {
+      ccswitchEl.textContent = 'wire_api = "responses"\nbase_url = "' + endpoint + '"\nmodel = "' + model + '"';
+    }
+
+    var tomlEl = document.getElementById("qs-toml-config");
+    if (tomlEl) {
+      tomlEl.textContent =
+        'model_provider = "codex-bridge"\nmodel = "' +
+        model +
+        '"\nmodel_reasoning_effort = "high"\ndisable_response_storage = true\npreferred_auth_method = "chatgpt"\n\n[model_providers.codex-bridge]\nname = "codex-bridge"\nwire_api = "responses"\nrequires_openai_auth = true\nbase_url = "' +
+        endpoint +
+        '"\n\n[windows]\nsandbox = "elevated"';
     }
 
     var curlEl = document.getElementById("quickstart-curl");
     if (curlEl) {
-      var model = providers && providers.length > 0 && providers[0].model ? providers[0].model : "MODEL_NAME";
-      curlEl.textContent = "Invoke-RestMethod -Uri \"" + endpoint + "/responses\" -Method Post -ContentType \"application/json\" -Body '{\"model\":\"" + model + "\",\"input\":\"hello\",\"stream\":true}'";
+      curlEl.textContent =
+        'Invoke-RestMethod -Uri "' +
+        endpoint +
+        '/responses" -Method Post -ContentType "application/json" -Body \'{"model":"' +
+        model +
+        '","input":"hello","stream":true}\'';
     }
   }
 
-  document.getElementById("btn-copy-curl").addEventListener("click", function () {
-    var curlEl = document.getElementById("quickstart-curl");
-    if (!curlEl) return;
-    navigator.clipboard.writeText(curlEl.textContent).then(function () {
-      showToast(t("quickstartCopied"), "success");
-    }).catch(function () {
-      showToast("Copy failed", "error");
-    });
+  function renderQuickstart() {
+    var endpoint = getDisplayEndpoint(settings.host, settings.port);
+    var endpointEl = document.getElementById("quickstart-endpoint");
+    if (endpointEl) endpointEl.textContent = endpoint;
+
+    var lanHint = document.getElementById("quickstart-lan-hint");
+    if (lanHint) lanHint.style.display = settings.host === "0.0.0.0" ? "block" : "none";
+
+    var modelsEl = document.getElementById("quickstart-models");
+    if (!modelsEl) return;
+    var firstModel = "MODEL_NAME";
+    if (!providers || providers.length === 0) {
+      modelsEl.innerHTML = "<p>" + t("noProviders") + "</p>";
+    } else {
+      modelsEl.innerHTML = providers
+        .map(function (p) {
+          return (p.models || [])
+            .map(function (m) {
+              var fullId = (p.key ? p.key + "/" : "") + (m.id || "?");
+              return (
+                '<span class="qs-model-tag" data-model="' +
+                escapeHtml(fullId) +
+                '" title="' +
+                escapeHtml(fullId) +
+                '">' +
+                escapeHtml(fullId) +
+                "</span>"
+              );
+            })
+            .join("");
+        })
+        .join("");
+      for (var pi = 0; pi < providers.length; pi++) {
+        if (providers[pi].models && providers[pi].models[0] && providers[pi].models[0].id) {
+          firstModel = (providers[pi].key ? providers[pi].key + "/" : "") + providers[pi].models[0].id;
+          break;
+        }
+      }
+    }
+
+    var selected = _qsSelectedModel && modelsEl.querySelector('[data-model="' + _qsSelectedModel + '"]') ? _qsSelectedModel : firstModel;
+    updateQuickstartTemplates(selected);
+  }
+
+  document.getElementById("quickstart-models").addEventListener("click", function (e) {
+    var tag = e.target.closest(".qs-model-tag");
+    if (!tag) return;
+    updateQuickstartTemplates(tag.getAttribute("data-model"));
   });
+
+  function setupCopyButton(btnId, sourceId) {
+    var btn = document.getElementById(btnId);
+    if (!btn) return;
+    btn.addEventListener("click", function () {
+      var el = document.getElementById(sourceId);
+      if (!el) return;
+      navigator.clipboard
+        .writeText(el.textContent)
+        .then(function () {
+          showToast(t("quickstartCopied"), "success");
+        })
+        .catch(function () {
+          showToast("Copy failed", "error");
+        });
+    });
+  }
+
+  setupCopyButton("btn-copy-curl", "quickstart-curl");
+  setupCopyButton("btn-copy-ccswitch", "qs-ccswitch-config");
+  setupCopyButton("btn-copy-toml", "qs-toml-config");
 
   // Open URL in system browser
   function openLink(url) {

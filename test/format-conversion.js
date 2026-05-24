@@ -33,7 +33,12 @@ function testOpenAIMultimodalImage() {
     ],
     stream: false,
   };
-  const payload = buildUpstreamRequest(requestBody, { model: "gpt-4o" }, {});
+  const payload = buildUpstreamRequest(
+    requestBody,
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] },
+    {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
+  );
   const lastMessage = payload.messages[payload.messages.length - 1];
   assert(Array.isArray(lastMessage.content), "content is an array (multimodal)");
   const textPart = lastMessage.content.find((p) => p.type === "text");
@@ -59,7 +64,12 @@ function testOpenAIMultimodalBase64Image() {
     ],
     stream: false,
   };
-  const payload = buildUpstreamRequest(requestBody, { model: "gpt-4o" }, {});
+  const payload = buildUpstreamRequest(
+    requestBody,
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] },
+    {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
+  );
   const lastMessage = payload.messages[payload.messages.length - 1];
   const imagePart = lastMessage.content.find((p) => p.type === "image_url");
   assert(imagePart !== undefined, "has image_url part for base64");
@@ -78,7 +88,12 @@ function testOpenAIPlainTextShortcut() {
     ],
     stream: false,
   };
-  const payload = buildUpstreamRequest(requestBody, { model: "gpt-4o" }, {});
+  const payload = buildUpstreamRequest(
+    requestBody,
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] },
+    {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
+  );
   const lastMessage = payload.messages[payload.messages.length - 1];
   assert(typeof lastMessage.content === "string", "single text part flattens to string");
   assert(lastMessage.content === "Hello", "text matches");
@@ -101,7 +116,12 @@ function testAnthropicMultimodalImage() {
     ],
     stream: false,
   };
-  const req = anthropic.buildUpstreamRequest(requestBody, { model: "claude-sonnet-4-20250514" }, {});
+  const req = anthropic.buildUpstreamRequest(
+    requestBody,
+    { models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }] },
+    {},
+    { id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 },
+  );
   const lastMessage = req.messages[req.messages.length - 1];
   assert(Array.isArray(lastMessage.content), "content is an array (multimodal)");
   const textPart = lastMessage.content.find((p) => p.type === "text");
@@ -129,7 +149,12 @@ function testAnthropicSkipsNonDataUri() {
     ],
     stream: false,
   };
-  const req = anthropic.buildUpstreamRequest(requestBody, { model: "claude-sonnet-4-20250514" }, {});
+  const req = anthropic.buildUpstreamRequest(
+    requestBody,
+    { models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }] },
+    {},
+    { id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 },
+  );
   const lastMessage = req.messages[req.messages.length - 1];
   assert(typeof lastMessage.content === "string", "non-data-URI image skipped, content flattens to string");
   assert(lastMessage.content === "Hi", "only text remains");
@@ -145,7 +170,12 @@ function testOpenAIJsonObjectFormat() {
     stream: false,
     text: { format: { type: "json_object" } },
   };
-  const payload = buildUpstreamRequest(requestBody, { model: "gpt-4o" }, {});
+  const payload = buildUpstreamRequest(
+    requestBody,
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] },
+    {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
+  );
   assert(payload.response_format !== undefined, "has response_format");
   assert(payload.response_format.type === "json_object", "type is json_object");
 }
@@ -159,7 +189,12 @@ function testOpenAIJsonSchemaFormat() {
     stream: false,
     text: { format: { type: "json_schema", name: "person", strict: true, schema } },
   };
-  const payload = buildUpstreamRequest(requestBody, { model: "gpt-4o" }, {});
+  const payload = buildUpstreamRequest(
+    requestBody,
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] },
+    {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
+  );
   assert(payload.response_format !== undefined, "has response_format");
   assert(payload.response_format.type === "json_schema", "type is json_schema");
   assert(payload.response_format.json_schema.name === "person", "name is preserved");
@@ -170,7 +205,12 @@ function testOpenAIJsonSchemaFormat() {
 function testOpenAINoFormat() {
   console.log("\n[Test] OpenAI Chat no response_format when absent");
   const requestBody = { model: "gpt-4o", input: "Hi", stream: false };
-  const payload = buildUpstreamRequest(requestBody, { model: "gpt-4o" }, {});
+  const payload = buildUpstreamRequest(
+    requestBody,
+    { models: [{ id: "gpt-4o", maxOutputK: 64, maxContextK: 128 }] },
+    {},
+    { id: "gpt-4o", maxOutputK: 64, maxContextK: 128 },
+  );
   assert(payload.response_format === undefined, "no response_format when not requested");
 }
 
@@ -184,7 +224,12 @@ function testAnthropicSystemFromInstructions() {
     instructions: "You are a helpful assistant.",
     stream: false,
   };
-  const req = anthropic.buildUpstreamRequest(requestBody, { model: "claude-sonnet-4-20250514" }, {});
+  const req = anthropic.buildUpstreamRequest(
+    requestBody,
+    { models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }] },
+    {},
+    { id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 },
+  );
   assert(req.system !== undefined, "has system field");
   assert(req.system === "You are a helpful assistant.", "system matches instructions");
 }
@@ -199,7 +244,12 @@ function testAnthropicSystemFromInputRole() {
     ],
     stream: false,
   };
-  const req = anthropic.buildUpstreamRequest(requestBody, { model: "claude-sonnet-4-20250514" }, {});
+  const req = anthropic.buildUpstreamRequest(
+    requestBody,
+    { models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }] },
+    {},
+    { id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 },
+  );
   assert(req.system !== undefined, "has system field");
   assert(req.system === "You speak French.", "system from input role");
   assert(req.messages.length === 1, "only user message in messages array");
@@ -217,7 +267,12 @@ function testAnthropicSystemMerged() {
     instructions: "You are polite.",
     stream: false,
   };
-  const req = anthropic.buildUpstreamRequest(requestBody, { model: "claude-sonnet-4-20250514" }, {});
+  const req = anthropic.buildUpstreamRequest(
+    requestBody,
+    { models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }] },
+    {},
+    { id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 },
+  );
   assert(req.system.includes("You are polite."), "system contains instructions");
   assert(req.system.includes("You speak French."), "system contains input system message");
   assert(req.system.includes("\n\n"), "system parts joined by double newline");
@@ -234,8 +289,9 @@ function testAnthropicThinkingLow() {
       stream: false,
       reasoning: { effort: "low" },
     },
-    { model: "claude-sonnet-4-20250514" },
+    { models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 },
   );
   assert(req.thinking.budget_tokens === 2000, "low budget = 2000");
 }
@@ -249,8 +305,9 @@ function testAnthropicThinkingHigh() {
       stream: false,
       reasoning: { effort: "high" },
     },
-    { model: "claude-sonnet-4-20250514" },
+    { models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 },
   );
   assert(req.thinking.budget_tokens === 16000, "high budget = 16000");
 }
@@ -265,8 +322,9 @@ function testAnthropicThinkingXhigh() {
       max_output_tokens: 8192,
       reasoning: { effort: "xhigh" },
     },
-    { model: "claude-sonnet-4-20250514" },
+    { models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 },
   );
   assert(req.thinking.budget_tokens === 8191, "xhigh budget = max_tokens - 1 (capped at 32000)");
 }
@@ -279,8 +337,9 @@ function testAnthropicNoThinking() {
       input: "Hi",
       stream: false,
     },
-    { model: "claude-sonnet-4-20250514" },
+    { models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }] },
     {},
+    { id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 },
   );
   assert(req.thinking === undefined, "no thinking block without reasoning config");
 }
@@ -302,7 +361,12 @@ function testAnthropicToolConversion() {
       },
     ],
   };
-  const req = anthropic.buildUpstreamRequest(requestBody, { model: "claude-sonnet-4-20250514" }, {});
+  const req = anthropic.buildUpstreamRequest(
+    requestBody,
+    { models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }] },
+    {},
+    { id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 },
+  );
   assert(Array.isArray(req.tools) && req.tools.length === 1, "has one tool");
   assert(req.tools[0].name === "get_weather", "tool name matches");
   assert(req.tools[0].description === "Get current weather", "tool description matches");
@@ -316,7 +380,12 @@ function testAnthropicFunctionCallConversion() {
     input: [{ type: "function_call", call_id: "call_123", name: "get_weather", arguments: '{"city":"London"}' }],
     stream: false,
   };
-  const req = anthropic.buildUpstreamRequest(requestBody, { model: "claude-sonnet-4-20250514" }, {});
+  const req = anthropic.buildUpstreamRequest(
+    requestBody,
+    { models: [{ id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 }] },
+    {},
+    { id: "claude-sonnet-4-20250514", maxOutputK: 64, maxContextK: 128 },
+  );
   const assistantMsg = req.messages.find((m) => m.role === "assistant");
   assert(assistantMsg !== undefined, "has assistant message");
   assert(Array.isArray(assistantMsg.content), "assistant content is array");
