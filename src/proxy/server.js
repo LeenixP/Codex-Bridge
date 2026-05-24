@@ -83,7 +83,7 @@ async function handleRequest(req, res, settings, providers) {
     return;
   }
 
-  log.debug(req.method + " " + pathname);
+  log.info("→ " + req.method + " " + pathname);
 
   try {
     if (pathname === "/v1/responses" && req.method === "POST") {
@@ -134,6 +134,7 @@ async function handleResponses(req, res, settings, providers) {
     return;
   }
 
+  log.info("→ POST /v1/responses stream=" + (requestBody.stream !== false) + " model=" + (requestBody.model || "?"));
   await orchestrate(req, res, requestBody, activeProvider, settings);
 }
 
