@@ -737,7 +737,7 @@ function dumpRequestThinking(payload, _provider) {
     });
     lines.push("  msg[" + m + "] assistant" + (hasThinking ? "" : " NO_THINKING") + ": [" + blocks.join(", ") + "]");
   }
-  log.warn("[anthropic] ERROR request thinking dump (" + payload.messages.length + " msgs):\n" + lines.join("\n"));
+  log.warn("[anthropic] upstream error — thinking state (" + payload.messages.length + " msgs):\n" + lines.join("\n"));
 }
 
 module.exports = {
