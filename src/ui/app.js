@@ -67,6 +67,7 @@
     // Update dynamic content: providers list, about desc
     if (providers !== undefined) renderProviders();
     renderQuickstart();
+    renderFallbackSelect();
   }
 
   function updateProxyStatusLabel() {
@@ -157,6 +158,29 @@
     });
   }
 
+  function renderFallbackSelect() {
+    var select = document.getElementById("fallback-model");
+    if (!select) return;
+    var current = settings.fallbackModel || "";
+    select.innerHTML = '<option value="" data-i18n="fallbackNone">' + t("fallbackNone") + "</option>";
+    var hasModels = false;
+    (providers || []).forEach(function (p) {
+      (p.models || []).forEach(function (m) {
+        if (m.id && p.key) {
+          hasModels = true;
+          var fullId = p.key + "/" + m.id;
+          var opt = document.createElement("option");
+          opt.value = fullId;
+          opt.textContent = fullId;
+          if (fullId === current) opt.selected = true;
+          select.appendChild(opt);
+        }
+      });
+    });
+    var hint = document.getElementById("fallback-no-providers");
+    if (hint) hint.style.display = hasModels ? "none" : "block";
+  }
+
   // Proxy status
   async function updateProxyStatus(status) {
     _proxyStatus = status;
@@ -216,6 +240,8 @@
     document.getElementById("setting-port").value = settings.port || 8629;
     var lanCheckbox = document.getElementById("setting-lan");
     if (lanCheckbox) lanCheckbox.checked = settings.host === "0.0.0.0";
+
+    renderFallbackSelect();
 
     setRadio("theme", settings.theme || "dark");
     setRadio("language", settings.language || "zh");
@@ -286,6 +312,14 @@
   if (traceCheckbox) {
     traceCheckbox.addEventListener("change", async () => {
       settings.traceEnabled = traceCheckbox.checked;
+      if (api) await api.saveSettings(settings);
+    });
+  }
+
+  var fallbackSelect = document.getElementById("fallback-model");
+  if (fallbackSelect) {
+    fallbackSelect.addEventListener("change", async () => {
+      settings.fallbackModel = fallbackSelect.value || "";
       if (api) await api.saveSettings(settings);
     });
   }
@@ -471,6 +505,16 @@
         testProvider(getCardIndex(e.target));
       });
     });
+    document.querySelectorAll(".btn-edit").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        openEditDialog(getCardIndex(e.target));
+      });
+    });
+    document.querySelectorAll(".btn-delete").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        deleteProvider(getCardIndex(e.target));
+      });
+    });
     document.querySelectorAll(".toggle-vision").forEach((cb) => {
       cb.addEventListener("change", async (e) => {
         const idx = getCardIndex(e.target);
@@ -504,6 +548,7 @@
     }
     renderProviders();
     renderQuickstart();
+    renderFallbackSelect();
   }
 
   async function testProvider(index) {
@@ -978,6 +1023,7 @@
       }
       renderProviders();
       renderQuickstart();
+      renderFallbackSelect();
     } catch (err) {
       showToast("Save failed: " + (err.message || "Unknown error"), "error");
     } finally {

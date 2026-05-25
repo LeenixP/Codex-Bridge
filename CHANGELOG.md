@@ -2,6 +2,17 @@
 
 All notable changes to Codex-Bridge will be documented in this file.
 
+## [1.3.0] — 2026-05-25
+
+### Added
+- **Model fallback page** — New dedicated sidebar page "Model Fallback" between Providers and Settings. Select a configured model to automatically handle requests for unconfigured models (e.g. `gpt5.4-mini`), preventing Codex retry loops.
+
+### Changed
+- **LAN access toggle** — Replaced listen address radio buttons with a single toggle switch and help-tip tooltip for a cleaner UI.
+
+### Fixed
+- **Provider edit/delete buttons unresponsive** — Restored missing `.btn-edit` and `.btn-delete` event bindings in `bindProviderActions()`.
+
 ## [1.2.0] — 2026-05-24
 
 ### Added

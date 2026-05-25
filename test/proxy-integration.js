@@ -280,6 +280,88 @@ async function testThinkParserSkippedWithReasoningContent() {
   assert(fullText.indexOf("<thinking>") !== -1, "literal <thinking> text preserved in output");
 }
 
+async function testFallbackModel() {
+  console.log("\n[Test] Fallback model routes unknown model to fallback");
+
+  await stopProxyServer();
+  await delay(100);
+
+  var providers = [
+    {
+      name: "Test Provider FB",
+      key: "fb",
+      protocol: "openai-chat",
+      baseUrl: "http://127.0.0.1:" + MOCK_PORT + "/v1",
+      apiKey: "test-key",
+      models: [{ id: "fallback-model", maxOutputK: 64, maxContextK: 128 }],
+    },
+  ];
+  var settingsWithFallback = {
+    port: PROXY_PORT,
+    host: "127.0.0.1",
+    fallbackModel: "fb/fallback-model",
+  };
+  await createProxyServer(settingsWithFallback, providers);
+  await delay(200);
+
+  var body = JSON.stringify({
+    model: "gpt5.4-mini",
+    input: "Say hello",
+    stream: false,
+  });
+  var res = await httpRequest(
+    {
+      hostname: "127.0.0.1",
+      port: PROXY_PORT,
+      path: "/v1/responses",
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+    },
+    body,
+  );
+  var data = JSON.parse(res.body);
+  assert(res.status === 200, "Status 200 with fallback");
+  assert(data.object === "response", "object is response");
+  assert(data.status === "completed", "status completed");
+}
+
+async function testFallbackDisabledReturns503() {
+  console.log("\n[Test] No fallback setting returns 503 for unknown model");
+
+  await stopProxyServer();
+  await delay(100);
+
+  var providers = [
+    {
+      name: "Test Provider NF",
+      key: "nf",
+      protocol: "openai-chat",
+      baseUrl: "http://127.0.0.1:" + MOCK_PORT + "/v1",
+      apiKey: "test-key",
+      models: [{ id: "some-model", maxOutputK: 64, maxContextK: 128 }],
+    },
+  ];
+  await createProxyServer({ port: PROXY_PORT, host: "127.0.0.1" }, providers);
+  await delay(200);
+
+  var body = JSON.stringify({
+    model: "gpt5.4-mini",
+    input: "Say hello",
+    stream: false,
+  });
+  var res = await httpRequest(
+    {
+      hostname: "127.0.0.1",
+      port: PROXY_PORT,
+      path: "/v1/responses",
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+    },
+    body,
+  );
+  assert(res.status === 503, "Status 503 without fallback");
+}
+
 async function main() {
   console.log("=== Codex-Bridge Proxy Integration Tests ===");
 
@@ -309,6 +391,8 @@ async function main() {
     await testResponsesStream();
     await testThinkParserSkippedWithReasoningContent();
     await testNoProvider();
+    await testFallbackModel();
+    await testFallbackDisabledReturns503();
   } catch (err) {
     console.error("\n[ERROR] Unexpected:", err);
     failed++;

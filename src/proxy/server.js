@@ -139,6 +139,23 @@ async function handleResponses(req, res, settings, providers) {
 
   const result = getProviderByModel(providers, requestBody.model);
   if (!result) {
+    if (settings.fallbackModel) {
+      const fallback = getProviderByModel(providers, settings.fallbackModel);
+      if (fallback) {
+        log.warn("model " + (requestBody.model || "?") + " not found, falling back to " + settings.fallbackModel);
+        requestBody.model = settings.fallbackModel;
+        log.info(
+          "→ POST /v1/responses stream=" +
+            (requestBody.stream !== false) +
+            " model=" +
+            requestBody.model +
+            " (fallback) → " +
+            fallback.provider.name,
+        );
+        await orchestrate(req, res, requestBody, fallback.provider, fallback.modelConfig, settings);
+        return;
+      }
+    }
     sendJson(res, 503, {
       error: { message: "No provider configured for model: " + (requestBody.model || "?"), type: "server_error", code: "no_provider" },
     });
@@ -165,6 +182,15 @@ async function handleResponsesCompact(req, res, settings, providers) {
 
   const result2 = getProviderByModel(providers, requestBody.model);
   if (!result2) {
+    if (settings.fallbackModel) {
+      const fallback2 = getProviderByModel(providers, settings.fallbackModel);
+      if (fallback2) {
+        log.warn("model " + (requestBody.model || "?") + " not found (compact), falling back to " + settings.fallbackModel);
+        requestBody.model = settings.fallbackModel;
+        await orchestrate(req, res, requestBody, fallback2.provider, fallback2.modelConfig, settings);
+        return;
+      }
+    }
     sendJson(res, 503, {
       error: { message: "No provider configured for model: " + (requestBody.model || "?"), type: "server_error", code: "no_provider" },
     });

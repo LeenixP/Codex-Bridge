@@ -44,6 +44,10 @@
           </svg>
           <span data-i18n="navProviders">供应商</span>
         </button>
+        <button class="nav-item" data-page="fallback">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <span data-i18n="navFallback">模型回退</span>
+        </button>
         <button class="nav-item" data-page="settings">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
@@ -155,6 +159,27 @@ model = "MODEL_NAME"</pre>
           <div class="empty-state">
             <p data-i18n="noProviders">尚未配置供应商。</p>
             <p data-i18n="noProvidersHint">点击「添加供应商」开始使用。</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Fallback Page -->
+      <section id="page-fallback" class="page">
+        <div class="page-header">
+          <div>
+            <h1 data-i18n="navFallback">模型回退</h1>
+            <p class="page-subtitle" data-i18n="fallbackSubtitle">当请求的模型未配置时，自动使用下方选择的模型处理。</p>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-body">
+            <div class="setting-item">
+              <label for="fallback-model" data-i18n="fallbackSelectLabel">回退模型</label>
+              <select id="fallback-model" class="inline-control" style="width:100%;max-width:320px">
+                <option value="" data-i18n="fallbackNone">不回退</option>
+              </select>
+            </div>
+            <small id="fallback-no-providers" style="display:none;font-size:12px;color:var(--text-muted);margin-top:8px" data-i18n="fallbackNoProviders">请先在供应商页面添加上游 API</small>
           </div>
         </div>
       </section>
