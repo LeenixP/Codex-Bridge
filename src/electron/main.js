@@ -3,7 +3,7 @@
 const { app, BrowserWindow, Menu, Tray, ipcMain, nativeImage, nativeTheme, shell } = require("electron");
 const path = require("node:path");
 const { loadSettings, saveSettings, loadProviders, saveProviders } = require("../shared/config");
-const { createProxyServer, stopProxyServer, getStatus, getLastError } = require("../proxy/server");
+const { createProxyServer, stopProxyServer, getStatus, getLastError, updateSettings, updateProviders } = require("../proxy/server");
 const { getQuickPresets, getVariantBaseUrl } = require("../proxy/presets");
 const log = require("../shared/logger");
 const https = require("node:https");
@@ -74,6 +74,7 @@ function registerIpcHandlers() {
     }
     settings = Object.assign({}, settings, sanitized);
     saveSettings(settings);
+    updateSettings(settings);
     return settings;
   });
   ipcMain.handle("get-providers", () => providers);
@@ -83,6 +84,7 @@ function registerIpcHandlers() {
       return p && typeof p.name === "string";
     });
     saveProviders(providers);
+    updateProviders(providers);
     return providers;
   });
   ipcMain.handle("get-proxy-status", () => getStatus());

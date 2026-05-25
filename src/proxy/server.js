@@ -9,6 +9,8 @@ const log = require("../shared/logger");
 let server = null;
 let status = "stopped";
 let lastError = "";
+let activeSettings = null;
+let _activeProviders = null;
 
 function createProxyServer(settings, providers) {
   const port = settings.port ?? 8629;
@@ -16,6 +18,9 @@ function createProxyServer(settings, providers) {
 
   status = "starting";
   lastError = "";
+
+  activeSettings = settings;
+  _activeProviders = providers;
 
   server = http.createServer((req, res) => handleRequest(req, res, settings, providers));
 
@@ -324,4 +329,12 @@ module.exports = {
   stopProxyServer,
   getStatus,
   getLastError,
+  updateSettings(newSettings) {
+    if (activeSettings && newSettings) {
+      Object.assign(activeSettings, newSettings);
+    }
+  },
+  updateProviders(newProviders) {
+    _activeProviders = newProviders;
+  },
 };
